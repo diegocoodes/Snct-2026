@@ -270,15 +270,6 @@ model SnctSiteSettings {
   @@map("snct_site_settings")
 }
 
-/// Histórico legado do migrate SQL (db/migrations). Novas migrações: prisma/migrations
-model SnctMigration {
-  filename  String   @id @db.VarChar(255)
-  checksum  String   @db.VarChar(128)
-  appliedAt DateTime @default(now()) @map("applied_at") @db.DateTime(3)
-
-  @@map("snct_migrations")
-}
-
 /// Ficha de avaliação da feira (notas 1–5; null = N/A)
 model Avaliacao {
   id                   BigInt   @id @default(autoincrement())
