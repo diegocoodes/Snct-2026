@@ -34,6 +34,7 @@ function ConfirmacaoInscricaoClient() {
 
   const isVisitante = perfil === "VISITANTE";
   const isProfessor = perfil === "PROFESSOR";
+  const isAvaliador = perfil === "AVALIADOR";
 
   useEffect(() => {
     if (!hash) return;
@@ -69,7 +70,9 @@ function ConfirmacaoInscricaoClient() {
           ? `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in. Para consultá-lo depois, use o CPF no menu Visitante.`
           : isProfessor
             ? `Seu perfil de ${roleLabel} foi criado. No menu Escola e alunos você cadastra a escola, os projetos e os alunos.`
-            : `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in diário.`
+            : isAvaliador
+              ? `Seu perfil de ${roleLabel} foi criado. Em Avaliar stands você escaneia o QR do stand e preenche a ficha.`
+              : `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in diário.`
       }
     >
       <div className="mx-auto grid max-w-sm place-items-center gap-4">

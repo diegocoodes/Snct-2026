@@ -1,0 +1,314 @@
+// Schema Prisma — fonte da verdade do banco SNCT
+// Models em PascalCase; tabelas físicas em snake_case via @@map / @map
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id       Int       @id @default(autoincrement())
+  codigo   String    @unique(map: "roles_codigo_unique") @db.VarChar(32)
+  nome     String    @db.VarChar(80)
+  usuarios Usuario[]
+
+  @@map("roles")
+}
+
+model Usuario {
+  id                      BigInt    @id @default(autoincrement())
+  roleId                  Int       @map("role_id")
+  nomeCompleto            String    @map("nome_completo") @db.VarChar(180)
+  email                   String    @unique(map: "usuarios_email_unique") @db.VarChar(255)
+  telefone                String    @db.VarChar(20)
+  cpf                     String    @unique(map: "usuarios_cpf_unique") @db.VarChar(11)
+  senhaHash               String    @map("senha_hash") @db.Text
+  dataNascimento          DateTime  @map("data_nascimento") @db.Date
+  foto                    String?   @db.VarChar(500)
+  aceitouDireitoImagem    Boolean   @default(false) @map("aceitou_direito_imagem")
+  dataAceiteDireitoImagem DateTime? @map("data_aceite_direito_imagem")
+  qrCodeHash              String    @unique(map: "usuarios_qr_code_hash_unique") @map("qr_code_hash") @db.VarChar(255)
+  ativo                   Boolean   @default(true)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  role               Role                 @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "usuarios_role_fk")
+  auditorias         Auditoria[]
+  checkins           Checkin[]            @relation("CheckinParticipante")
+  checkinsRealizados Checkin[]            @relation("CheckinOperador")
+  sessoes            Sessao[]
+  escola             ProfessorEscola?
+  vinculoAluno       ProfessorTemaAluno?
+  avaliacoes         Avaliacao[]
+
+  @@index([ativo], map: "usuarios_ativo_idx")
+  @@index([roleId], map: "usuarios_role_id_idx")
+  @@map("usuarios")
+}
+
+model Checkin {
+  id                    BigInt   @id @default(autoincrement())
+  usuarioId             BigInt   @map("usuario_id")
+  dataCheckin           DateTime @map("data_checkin") @db.Date
+  horarioCheckin        DateTime @map("horario_checkin") @db.DateTime(3)
+  realizadoPorUsuarioId BigInt   @map("realizado_por_usuario_id")
+  metodo                String   @db.VarChar(32)
+  createdAt             DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  participante Usuario @relation("CheckinParticipante", fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "checkins_usuario_fk")
+  operador     Usuario @relation("CheckinOperador", fields: [realizadoPorUsuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "checkins_realizado_por_fk")
+
+  @@unique([usuarioId, dataCheckin], map: "checkins_usuario_data_unique")
+  @@index([dataCheckin], map: "checkins_data_idx")
+  @@index([realizadoPorUsuarioId], map: "checkins_realizado_por_fk")
+  @@map("checkins")
+}
+
+model Auditoria {
+  id                   BigInt   @id @default(autoincrement())
+  usuarioResponsavelId BigInt?  @map("usuario_responsavel_id")
+  acao                 String   @db.VarChar(120)
+  entidade             String   @db.VarChar(80)
+  entidadeId           String?  @map("entidade_id") @db.VarChar(64)
+  dadosAnteriores      Json?    @map("dados_anteriores")
+  dadosNovos           Json?    @map("dados_novos")
+  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  responsavel Usuario? @relation(fields: [usuarioResponsavelId], references: [id], onUpdate: NoAction, map: "auditoria_responsavel_fk")
+
+  @@index([createdAt], map: "auditoria_created_at_idx")
+  @@index([usuarioResponsavelId, createdAt], map: "auditoria_responsavel_idx")
+  @@map("auditoria")
+}
+
+model Sessao {
+  id        String   @id @db.VarChar(64)
+  usuarioId BigInt   @map("usuario_id")
+  tokenHash String   @unique(map: "sessoes_token_hash_unique") @map("token_hash") @db.VarChar(128)
+  expiresAt DateTime @map("expires_at") @db.DateTime(3)
+  ipHash    String?  @map("ip_hash") @db.VarChar(128)
+  userAgent String?  @map("user_agent") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "sessoes_usuario_fk")
+
+  @@index([expiresAt], map: "sessoes_expires_idx")
+  @@index([usuarioId], map: "sessoes_usuario_idx")
+  @@map("sessoes")
+}
+
+model RateLimit {
+  rateKey         String   @id @map("rate_key") @db.VarChar(255)
+  requestCount    Int      @map("request_count")
+  windowStartedAt DateTime @map("window_started_at") @db.DateTime(3)
+  expiresAt       DateTime @map("expires_at") @db.DateTime(3)
+
+  @@index([expiresAt], map: "rate_limits_expiry_idx")
+  @@map("rate_limits")
+}
+
+/// Stand de exposição (tabela física: estandes)
+model Stand {
+  id          BigInt   @id @default(autoincrement())
+  codigo      String   @unique(map: "estandes_codigo_unique") @db.VarChar(40)
+  nome        String?  @db.VarChar(180)
+  localizacao String?  @db.VarChar(255)
+  status      String   @default("DISPONIVEL") @db.VarChar(32)
+  qrCodeHash  String   @unique(map: "estandes_qr_code_hash_unique") @map("qr_code_hash") @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  projeto     Projeto?
+  avaliacoes Avaliacao[]
+
+  @@index([status], map: "estandes_status_idx")
+  @@map("estandes")
+}
+
+model ProfessorEscola {
+  id                 BigInt   @id @default(autoincrement())
+  professorUsuarioId BigInt   @unique(map: "professor_escolas_professor_unique") @map("professor_usuario_id")
+  nome               String   @db.VarChar(180)
+  cidade             String?  @db.VarChar(120)
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  professor Usuario   @relation(fields: [professorUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_escolas_professor_fk")
+  projetos  Projeto[]
+
+  @@map("professor_escolas")
+}
+
+/// Projeto escolar (tabela física: professor_temas)
+model Projeto {
+  id        BigInt   @id @default(autoincrement())
+  escolaId  BigInt   @map("escola_id")
+  titulo    String   @db.VarChar(180)
+  area      String?  @db.VarChar(180)
+  descricao String?  @db.VarChar(500)
+  status    String   @default("PENDENTE") @db.VarChar(32)
+  standId   BigInt?  @unique(map: "professor_temas_estande_unique") @map("estande_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  escola ProfessorEscola      @relation(fields: [escolaId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_temas_escola_fk")
+  stand  Stand?               @relation(fields: [standId], references: [id], onUpdate: NoAction, map: "professor_temas_estande_fk")
+  alunos ProfessorTemaAluno[]
+  avaliacoes Avaliacao[]
+
+  @@index([escolaId], map: "professor_temas_escola_idx")
+  @@index([status], map: "professor_temas_status_idx")
+  @@map("professor_temas")
+}
+
+model ProfessorTemaAluno {
+  id           BigInt   @id @default(autoincrement())
+  projetoId    BigInt   @map("tema_id")
+  usuarioId    BigInt   @unique(map: "professor_tema_alunos_usuario_unique") @map("usuario_id")
+  nomeCompleto String   @map("nome_completo") @db.VarChar(180)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  projeto   Projeto                    @relation(fields: [projetoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_tema_alunos_tema_fk")
+  usuario    Usuario                   @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_tema_alunos_usuario_fk")
+  documentos ProfessorAlunoDocumento[]
+
+  @@index([projetoId], map: "professor_tema_alunos_tema_idx")
+  @@map("professor_tema_alunos")
+}
+
+model ProfessorAlunoDocumento {
+  id                   String   @id @db.VarChar(64)
+  professorTemaAlunoId BigInt   @map("professor_tema_aluno_id")
+  originalName         String   @map("original_name") @db.VarChar(180)
+  storageName          String   @unique(map: "professor_aluno_documentos_storage_unique") @map("storage_name") @db.VarChar(255)
+  mimeType             String   @map("mime_type") @db.VarChar(255)
+  byteSize             Int      @map("byte_size")
+  sha256               String   @db.VarChar(128)
+  scanStatus           String   @default("clean") @map("scan_status") @db.VarChar(32)
+  encryptionIv         Bytes    @map("encryption_iv") @db.Blob
+  encryptionTag        Bytes    @map("encryption_tag") @db.Blob
+  encryptionKeyVersion Int      @map("encryption_key_version")
+  fileData             Bytes    @map("file_data") @db.LongBlob
+  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  aluno ProfessorTemaAluno @relation(fields: [professorTemaAlunoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_aluno_documentos_aluno_fk")
+
+  @@index([professorTemaAlunoId], map: "professor_aluno_documentos_aluno_idx")
+  @@map("professor_aluno_documentos")
+}
+
+model SnctEvent {
+  id        String   @id @db.VarChar(64)
+  eventDate String   @map("event_date") @db.Text
+  eventTime String   @map("event_time") @db.Text
+  title     String   @db.Text
+  location  String   @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("snct_events")
+}
+
+model SnctNotice {
+  id           String               @id @db.VarChar(64)
+  title        String               @db.Text
+  registration String               @db.Text
+  status       String               @db.VarChar(32)
+  sortOrder    Int                  @default(0) @map("sort_order")
+  createdAt    DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  documents    SnctNoticeDocument[]
+
+  @@map("snct_notices")
+}
+
+model SnctNoticeDocument {
+  id                   String   @id @db.VarChar(64)
+  noticeId             String?  @map("notice_id") @db.VarChar(64)
+  originalName         String   @map("original_name") @db.Text
+  storageName          String   @unique(map: "snct_notice_documents_storage_unique") @map("storage_name") @db.VarChar(255)
+  mimeType             String   @map("mime_type") @db.VarChar(255)
+  byteSize             Int      @map("byte_size")
+  sha256               String   @db.VarChar(128)
+  scanStatus           String   @default("clean") @map("scan_status") @db.VarChar(32)
+  encryptionIv         Bytes    @map("encryption_iv") @db.Blob
+  encryptionTag        Bytes    @map("encryption_tag") @db.Blob
+  encryptionKeyVersion Int      @map("encryption_key_version")
+  fileData             Bytes    @map("file_data") @db.LongBlob
+  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  notice SnctNotice? @relation(fields: [noticeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "snct_notice_documents_notice_fk")
+
+  @@index([noticeId], map: "snct_notice_documents_notice_idx")
+  @@map("snct_notice_documents")
+}
+
+model SnctPartner {
+  id        String   @id @db.VarChar(64)
+  name      String   @db.Text
+  logo      String   @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("snct_partners")
+}
+
+model SnctSiteSettings {
+  id              Int      @id @default(1) @db.SmallInt
+  eventEdition    String   @map("event_edition") @db.VarChar(255)
+  heroImageUrl    String   @map("hero_image_url") @db.VarChar(600)
+  privacyVersion  String   @default("2026-07-20") @map("privacy_version") @db.VarChar(64)
+  retentionMonths Int      @default(24) @map("retention_months")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("snct_site_settings")
+}
+
+/// Histórico legado do migrate SQL (db/migrations). Novas migrações: prisma/migrations
+model SnctMigration {
+  filename  String   @id @db.VarChar(255)
+  checksum  String   @db.VarChar(128)
+  appliedAt DateTime @default(now()) @map("applied_at") @db.DateTime(3)
+
+  @@map("snct_migrations")
+}
+
+/// Ficha de avaliação da feira (notas 1–5; null = N/A)
+model Avaliacao {
+  id                   BigInt   @id @default(autoincrement())
+  standId              BigInt   @map("stand_id")
+  projetoId            BigInt   @map("projeto_id")
+  avaliadorUsuarioId   BigInt   @map("avaliador_usuario_id")
+  // 1. Apresentação do trabalho
+  c11Organizacao       Int?     @map("c11_organizacao")
+  c12Estruturacao      Int?     @map("c12_estruturacao")
+  c13RelevanciaTema    Int?     @map("c13_relevancia_tema")
+  c14ImpactoProjeto    Int?     @map("c14_impacto_projeto")
+  // 2. Apresentação oral
+  c21Comunicacao       Int?     @map("c21_comunicacao")
+  c22RespostaPerguntas Int?     @map("c22_resposta_perguntas")
+  // 3. Desenvolvimento
+  c31Fundamentacao     Int?     @map("c31_fundamentacao")
+  c32Metodo            Int?     @map("c32_metodo")
+  c35Originalidade     Int?     @map("c35_originalidade")
+  c34Conclusao         Int?     @map("c34_conclusao")
+  total                Int      @default(0)
+  observacoes          String?  @db.Text
+  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  stand     Stand   @relation(fields: [standId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliacoes_stand_fk")
+  projeto   Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliacoes_projeto_fk")
+  avaliador Usuario @relation(fields: [avaliadorUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliacoes_avaliador_fk")
+
+  @@unique([avaliadorUsuarioId, projetoId], map: "avaliacoes_avaliador_projeto_unique")
+  @@index([standId], map: "avaliacoes_stand_idx")
+  @@index([projetoId], map: "avaliacoes_projeto_idx")
+  @@map("avaliacoes")
+}

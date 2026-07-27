@@ -17,6 +17,7 @@ import * as authAll from "@/routes/auth-all";
 import * as authLogin from "@/routes/auth-login";
 import * as authLogout from "@/routes/auth-logout";
 import * as authRegister from "@/routes/auth-register";
+import * as avaliador from "@/routes/avaliador";
 import * as checkins from "@/routes/checkins";
 import * as credencial from "@/routes/credencial";
 import * as documents from "@/routes/documents";
@@ -106,6 +107,11 @@ mount("post", "/api/staff", staff.POST);
 mount("get", "/api/professor", professor.GET);
 mount("post", "/api/professor", professor.POST);
 mount("delete", "/api/professor", professor.DELETE);
+mount("get", "/api/avaliador/criterios", avaliador.GET_CRITERIOS);
+mount("get", "/api/avaliador/stand/:qrCodeHash", (request, qrCodeHash) =>
+  avaliador.GET_STAND(request, qrCodeHash),
+);
+mount("post", "/api/avaliador/avaliacoes", avaliador.POST_AVALIACAO);
 mount("get", "/api/checkins/participantes", checkins.GET_PARTICIPANTES);
 mount("get", "/api/checkins/buscar", checkins.GET_BUSCAR);
 mount("get", "/api/checkins/usuario/:usuarioId/historico", (request, usuarioId) =>

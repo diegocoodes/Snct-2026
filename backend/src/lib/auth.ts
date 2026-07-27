@@ -272,34 +272,50 @@ export async function ensureBootstrapAdmin() {
   const existing = await findUsuarioByEmail(email);
   if (existing) {
     if (existing.role_codigo !== "ADMINISTRADOR") {
-      throw new Error(
-        "SNCT_ADMIN_EMAIL já pertence a uma conta não administrativa.",
+      console.warn(
+        "[snct] SNCT_ADMIN_EMAIL já pertence a uma conta não administrativa; bootstrap ignorado.",
       );
     }
     return;
   }
 
   const role = await getRoleByCodigo("ADMINISTRADOR");
-  if (!role) throw new Error("Role ADMINISTRADOR não encontrada.");
+  if (!role) {
+    console.warn("[snct] Role ADMINISTRADOR não encontrada; bootstrap ignorado.");
+    return;
+  }
 
-  const senhaHash = await hashPassword(password);
-  await query(
-    `INSERT INTO usuarios
-      (role_id, nome_completo, email, telefone, cpf, senha_hash,
-       data_nascimento, aceitou_direito_imagem, data_aceite_direito_imagem,
-       qr_code_hash, ativo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(3), $8, TRUE)`,
-    [
-      role.id,
-      "Administrador SNCT",
-      email,
-      "00000000000",
-      "00000000000",
-      senhaHash,
-      "1990-01-01",
-      createVisitorHash(),
-    ],
-  );
+  // CPF placeholder único derivado do e-mail (não conflita com 00000000000).
+  const digits = createHash("sha256")
+    .update(`snct-admin:${email}`)
+    .digest("hex")
+    .replace(/\D/g, "")
+    .padEnd(11, "0")
+    .slice(0, 11);
+
+  try {
+    const senhaHash = await hashPassword(password);
+    await query(
+      `INSERT INTO usuarios
+        (role_id, nome_completo, email, telefone, cpf, senha_hash,
+         data_nascimento, aceitou_direito_imagem, data_aceite_direito_imagem,
+         qr_code_hash, ativo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(3), $8, TRUE)`,
+      [
+        role.id,
+        "Administrador SNCT",
+        email,
+        "81999999999",
+        digits,
+        senhaHash,
+        "1990-01-01",
+        createVisitorHash(),
+      ],
+    );
+  } catch (error) {
+    // Nunca derruba o login por falha de bootstrap (ex.: CPF/e-mail já existentes).
+    console.warn("[snct] Bootstrap de admin ignorado:", error);
+  }
 }
 
 export { requiresMfa, AUTH_ROLE_TO_CODIGO };

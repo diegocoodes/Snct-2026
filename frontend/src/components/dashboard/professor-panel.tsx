@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputMask } from "@/components/ui/input-mask";
 import { Label } from "@/components/ui/label";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import { buildCredentialQrPayload } from "@/lib/qr-payload";
 import { secureFetch } from "@/lib/secure-fetch";
@@ -31,6 +32,8 @@ const checkboxClassName =
   "mt-1 size-4 shrink-0 cursor-pointer rounded border border-cyan-electric/40 bg-[#111329] accent-cyan-electric";
 
 type Step = "escola" | "temas" | "cadastro" | "inscritos";
+
+type ProjetoStatus = "PENDENTE" | "APROVADO" | "REJEITADO";
 
 type ProfessorEscola = {
   id: string;
@@ -41,8 +44,16 @@ type ProfessorEscola = {
 type ProfessorTema = {
   id: string;
   titulo: string;
+  area: string | null;
   descricao: string | null;
+  status: ProjetoStatus;
   alunosCount: number;
+  estande: {
+    id: string;
+    codigo: string;
+    nome: string | null;
+    localizacao: string;
+  } | null;
 };
 
 type ProfessorAlunoDocumento = {
@@ -128,6 +139,7 @@ function ProfessorPanel() {
   const [addingTema, setAddingTema] = useState(false);
   const [editingTemaId, setEditingTemaId] = useState<string | null>(null);
   const [temaTitulo, setTemaTitulo] = useState("");
+  const [temaArea, setTemaArea] = useState("");
   const [temaDescricao, setTemaDescricao] = useState("");
   const [selectedTemaId, setSelectedTemaId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -274,12 +286,14 @@ function ProfessorPanel() {
       {
         action: "createTema",
         titulo: temaTitulo,
+        area: temaArea,
         descricao: temaDescricao,
       },
-      "Projeto cadastrado.",
+      "Projeto cadastrado e enviado para análise.",
     );
     if (ok) {
       setTemaTitulo("");
+      setTemaArea("");
       setTemaDescricao("");
       setAddingTema(false);
     }
@@ -294,6 +308,7 @@ function ProfessorPanel() {
         action: "updateTema",
         temaId: editingTemaId,
         titulo: temaTitulo,
+        area: temaArea,
         descricao: temaDescricao,
       },
       "Projeto atualizado.",
@@ -301,6 +316,7 @@ function ProfessorPanel() {
     if (ok) {
       setEditingTemaId(null);
       setTemaTitulo("");
+      setTemaArea("");
       setTemaDescricao("");
     }
   }
@@ -324,6 +340,7 @@ function ProfessorPanel() {
     setAddingTema(false);
     setEditingTemaId(tema.id);
     setTemaTitulo(tema.titulo);
+    setTemaArea(tema.area ?? "");
     setTemaDescricao(tema.descricao ?? "");
   }
 
@@ -445,11 +462,12 @@ function ProfessorPanel() {
     setSelectedTemaId(null);
     setEditingTemaId(null);
     setTemaTitulo("");
+    setTemaArea("");
     setTemaDescricao("");
     setAddingTema(true);
     setStep("temas");
     setError("");
-    setMessage("Preencha o título para cadastrar o projeto.");
+    setMessage("Preencha título e área/tema para cadastrar o projeto.");
   }
 
   function goCadastrarAluno() {
@@ -463,6 +481,7 @@ function ProfessorPanel() {
       setSelectedTemaId(null);
       setEditingTemaId(null);
       setTemaTitulo("");
+      setTemaArea("");
       setTemaDescricao("");
       setAddingTema(true);
       setStep("temas");
@@ -699,6 +718,7 @@ function ProfessorPanel() {
                 onClick={() => {
                   setEditingTemaId(null);
                   setTemaTitulo("");
+                  setTemaArea("");
                   setTemaDescricao("");
                   setAddingTema(true);
                 }}
@@ -712,26 +732,38 @@ function ProfessorPanel() {
           {addingTema || editingTemaId ? (
             <form
               onSubmit={editingTemaId ? onUpdateTema : onCreateTema}
-              className="flex flex-col gap-3 rounded-2xl border border-dashed border-cyan-electric/30 bg-cyan-electric/[0.03] p-4 sm:flex-row sm:items-end"
+              className="flex flex-col gap-3 rounded-2xl border border-dashed border-cyan-electric/30 bg-cyan-electric/[0.03] p-4"
             >
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="tema-titulo">Título</Label>
-                <Input
-                  id="tema-titulo"
-                  value={temaTitulo}
-                  onChange={(event) => setTemaTitulo(event.target.value)}
-                  placeholder="Ex.: Robótica educacional"
-                  required
-                  autoFocus
-                />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="tema-titulo">Título do projeto</Label>
+                  <Input
+                    id="tema-titulo"
+                    value={temaTitulo}
+                    onChange={(event) => setTemaTitulo(event.target.value)}
+                    placeholder="Ex.: Robótica educacional"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tema-area">Área/tema</Label>
+                  <Input
+                    id="tema-area"
+                    value={temaArea}
+                    onChange={(event) => setTemaArea(event.target.value)}
+                    placeholder="Ex.: Ciências da Natureza"
+                    required
+                  />
+                </div>
               </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="tema-descricao">Descrição</Label>
+              <div className="space-y-2">
+                <Label htmlFor="tema-descricao">Descrição (opcional)</Label>
                 <Input
                   id="tema-descricao"
                   value={temaDescricao}
                   onChange={(event) => setTemaDescricao(event.target.value)}
-                  placeholder="Opcional"
+                  placeholder="Resumo do projeto"
                 />
               </div>
               <div className="flex gap-2">
@@ -747,6 +779,7 @@ function ProfessorPanel() {
                     setAddingTema(false);
                     setEditingTemaId(null);
                     setTemaTitulo("");
+                    setTemaArea("");
                     setTemaDescricao("");
                   }}
                 >
@@ -776,11 +809,31 @@ function ProfessorPanel() {
                       <span className="block font-medium text-ice-white">
                         {tema.titulo}
                       </span>
-                      <span className="mt-1 block text-sm text-blue-gray">
-                        {tema.alunosCount} aluno
-                        {tema.alunosCount === 1 ? "" : "s"}
-                        {tema.descricao ? ` · ${tema.descricao}` : ""}
+                      <span className="mt-1 flex flex-wrap items-center gap-2 text-sm text-blue-gray">
+                        {tema.status === "APROVADO" ? (
+                          <StatusBadge status="success">Aprovado</StatusBadge>
+                        ) : tema.status === "REJEITADO" ? (
+                          <StatusBadge status="error">Rejeitado</StatusBadge>
+                        ) : (
+                          <StatusBadge status="warning">Pendente</StatusBadge>
+                        )}
+                        <span>
+                          {tema.alunosCount}/4 aluno
+                          {tema.alunosCount === 1 ? "" : "s"}
+                          {tema.area ? ` · ${tema.area}` : ""}
+                          {tema.descricao ? ` · ${tema.descricao}` : ""}
+                        </span>
                       </span>
+                      {tema.estande ? (
+                        <span className="mt-1 block text-sm text-cyan-electric/90">
+                          Stand {tema.estande.codigo}
+                          {tema.estande.nome ? ` — ${tema.estande.nome}` : ""}
+                        </span>
+                      ) : (
+                        <span className="mt-1 block text-sm text-blue-gray">
+                          Sem stand (aguardando aprovação do administrador)
+                        </span>
+                      )}
                     </button>
                     <div className="flex shrink-0 flex-wrap gap-1">
                       <Button
@@ -806,9 +859,12 @@ function ProfessorPanel() {
                         type="button"
                         variant="glow"
                         size="sm"
+                        disabled={tema.alunosCount >= 4}
                         onClick={() => openCadastro(tema.id)}
                       >
-                        Cadastrar alunos
+                        {tema.alunosCount >= 4
+                          ? "Limite de alunos"
+                          : "Cadastrar alunos"}
                       </Button>
                     </div>
                   </div>
@@ -849,9 +905,17 @@ function ProfessorPanel() {
 
           <div className="rounded-2xl border border-cyan-electric/25 bg-cyan-electric/[0.05] px-4 py-3 text-sm text-cyan-100">
             Você está cadastrando alunos no projeto{" "}
-            <strong className="text-ice-white">{selectedTema.titulo}</strong>.
+            <strong className="text-ice-white">{selectedTema.titulo}</strong>
+            {" "}
+            ({alunos.length}/4 participantes).
           </div>
 
+          {alunos.length >= 4 ? (
+            <p className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+              Este projeto já atingiu o limite de 4 alunos. Remova um aluno para
+              cadastrar outro.
+            </p>
+          ) : (
           <form
             className="grid gap-4 sm:grid-cols-2"
             onSubmit={(event) => void onCreateAluno(event)}
@@ -1018,6 +1082,7 @@ function ProfessorPanel() {
               </Button>
             </div>
           </form>
+          )}
         </section>
       ) : null}
 

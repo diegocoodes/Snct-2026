@@ -7,7 +7,9 @@ import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   FileText,
+  FolderKanban,
   Gift,
+  LayoutGrid,
   LoaderCircle,
   Megaphone,
   Paperclip,
@@ -23,6 +25,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminEstandesPanel } from "@/components/dashboard/admin-estandes-panel";
+import { AdminProjetosPanel } from "@/components/dashboard/admin-projetos-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -195,6 +199,12 @@ function AdminDashboard({
           </TabsTrigger>
           <TabsTrigger value="partners">
             <ShieldCheck aria-hidden /> Parceiros
+          </TabsTrigger>
+          <TabsTrigger value="estandes">
+            <LayoutGrid aria-hidden /> Stands
+          </TabsTrigger>
+          <TabsTrigger value="projetos">
+            <FolderKanban aria-hidden /> Projetos
           </TabsTrigger>
           <TabsTrigger value="audit">
             <ScrollText aria-hidden /> Auditoria
@@ -865,6 +875,14 @@ function AdminDashboard({
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="estandes" className="pt-7">
+          <AdminEstandesPanel />
+        </TabsContent>
+
+        <TabsContent value="projetos" className="pt-7">
+          <AdminProjetosPanel />
         </TabsContent>
 
         <TabsContent value="audit" className="pt-7">

@@ -23,11 +23,21 @@ export type ProfessorEscola = {
   createdAt: string;
 };
 
+export type ProjetoStatus = "PENDENTE" | "APROVADO" | "REJEITADO";
+
 export type ProfessorTema = {
   id: string;
   escolaId: string;
   titulo: string;
+  area: string | null;
   descricao: string | null;
+  status: ProjetoStatus;
+  estande: {
+    id: string;
+    codigo: string;
+    nome: string | null;
+    localizacao: string;
+  } | null;
   createdAt: string;
   alunosCount: number;
 };
@@ -245,8 +255,19 @@ export async function deleteEscola(professorId: string) {
      WHERE t.escola_id = $1`,
     [escola.id],
   );
+  const estandes = await query<{ estande_id: number }>(
+    `SELECT estande_id FROM professor_temas
+     WHERE escola_id = $1 AND estande_id IS NOT NULL`,
+    [escola.id],
+  );
 
   await query(`DELETE FROM professor_escolas WHERE id = $1`, [escola.id]);
+  for (const item of estandes.rows) {
+    await query(
+      `UPDATE estandes SET status = 'DISPONIVEL', nome = NULL WHERE id = $1`,
+      [item.estande_id],
+    ).catch(() => undefined);
+  }
   for (const aluno of alunos.rows) {
     await query(`DELETE FROM usuarios WHERE id = $1`, [aluno.usuario_id]).catch(
       () => undefined,
@@ -260,16 +281,28 @@ export async function listTemas(escolaId: string) {
     id: number;
     escola_id: number;
     titulo: string;
+    area: string | null;
     descricao: string | null;
+    status: ProjetoStatus;
     created_at: Date;
     alunos_count: number;
+    estande_id: number | null;
+    estande_codigo: string | null;
+    estande_nome: string | null;
+    estande_localizacao: string | null;
   }>(
-    `SELECT t.id, t.escola_id, t.titulo, t.descricao, t.created_at,
-            COUNT(a.id) AS alunos_count
+    `SELECT t.id, t.escola_id, t.titulo, t.area, t.descricao, t.status, t.created_at,
+            COUNT(a.id) AS alunos_count,
+            t.estande_id,
+            e.codigo AS estande_codigo,
+            e.nome AS estande_nome,
+            e.localizacao AS estande_localizacao
      FROM professor_temas t
      LEFT JOIN professor_tema_alunos a ON a.tema_id = t.id
+     LEFT JOIN estandes e ON e.id = t.estande_id
      WHERE t.escola_id = $1
-     GROUP BY t.id, t.escola_id, t.titulo, t.descricao, t.created_at
+     GROUP BY t.id, t.escola_id, t.titulo, t.area, t.descricao, t.status, t.created_at,
+              t.estande_id, e.codigo, e.nome, e.localizacao
      ORDER BY t.created_at DESC`,
     [escolaId],
   );
@@ -280,7 +313,18 @@ export async function listTemas(escolaId: string) {
         id: toId(row.id),
         escolaId: toId(row.escola_id),
         titulo: row.titulo,
+        area: row.area,
         descricao: row.descricao,
+        status: row.status,
+        estande:
+          row.estande_id != null && row.estande_codigo
+            ? {
+                id: toId(row.estande_id),
+                codigo: row.estande_codigo,
+                nome: row.estande_nome,
+                localizacao: row.estande_localizacao ?? "",
+              }
+            : null,
         createdAt: new Date(row.created_at).toISOString(),
         alunosCount: Number(row.alunos_count ?? 0),
       }) satisfies ProfessorTema,
@@ -289,18 +333,22 @@ export async function listTemas(escolaId: string) {
 
 export async function createTema(
   escolaId: string,
-  input: { titulo: string; descricao?: string },
+  input: { titulo: string; area?: string; descricao?: string },
 ) {
   const titulo = input.titulo.trim();
+  const area = input.area?.trim() || null;
   const descricao = input.descricao?.trim() || null;
   if (titulo.length < 2) {
     return { ok: false as const, status: 400, error: "Informe o título do projeto." };
   }
+  if (!area || area.length < 2) {
+    return { ok: false as const, status: 400, error: "Informe a área/tema do projeto." };
+  }
 
   await query(
-    `INSERT INTO professor_temas (escola_id, titulo, descricao)
-     VALUES ($1, $2, $3)`,
-    [escolaId, titulo, descricao],
+    `INSERT INTO professor_temas (escola_id, titulo, area, descricao, status)
+     VALUES ($1, $2, $3, $4, 'PENDENTE')`,
+    [escolaId, titulo, area, descricao],
   );
   const temas = await listTemas(escolaId);
   return { ok: true as const, tema: temas[0] };
@@ -309,7 +357,7 @@ export async function createTema(
 export async function updateTema(
   temaId: string,
   professorId: string,
-  input: { titulo: string; descricao?: string },
+  input: { titulo: string; area?: string; descricao?: string },
 ) {
   const owned = await assertTemaOwnedByProfessor(temaId, professorId);
   if (!owned) {
@@ -317,23 +365,27 @@ export async function updateTema(
   }
 
   const titulo = input.titulo.trim();
+  const area = input.area?.trim() || null;
   const descricao = input.descricao?.trim() || null;
   if (titulo.length < 2) {
     return { ok: false as const, status: 400, error: "Informe o título do projeto." };
   }
+  if (!area || area.length < 2) {
+    return { ok: false as const, status: 400, error: "Informe a área/tema do projeto." };
+  }
 
   await query(
     `UPDATE professor_temas
-     SET titulo = $1, descricao = $2
-     WHERE id = $3`,
-    [titulo, descricao, temaId],
+     SET titulo = $1, area = $2, descricao = $3
+     WHERE id = $4`,
+    [titulo, area, descricao, temaId],
   );
   return { ok: true as const };
 }
 
 export async function deleteTema(temaId: string, professorId: string) {
-  const owned = await query<{ id: number }>(
-    `SELECT t.id
+  const owned = await query<{ id: number; estande_id: number | null }>(
+    `SELECT t.id, t.estande_id
      FROM professor_temas t
      INNER JOIN professor_escolas e ON e.id = t.escola_id
      WHERE t.id = $1 AND e.professor_usuario_id = $2
@@ -348,7 +400,14 @@ export async function deleteTema(temaId: string, professorId: string) {
     `SELECT usuario_id FROM professor_tema_alunos WHERE tema_id = $1`,
     [temaId],
   );
+  const estandeId = owned.rows[0].estande_id;
   await query(`DELETE FROM professor_temas WHERE id = $1`, [temaId]);
+  if (estandeId != null) {
+    await query(
+      `UPDATE estandes SET status = 'DISPONIVEL', nome = NULL WHERE id = $1`,
+      [estandeId],
+    );
+  }
   for (const aluno of alunos.rows) {
     await query(`DELETE FROM usuarios WHERE id = $1`, [aluno.usuario_id]).catch(
       () => undefined,
@@ -453,6 +512,18 @@ export async function createAluno(
   const owned = await assertTemaOwnedByProfessor(temaId, professorId);
   if (!owned) {
     return { ok: false as const, status: 404, error: "Projeto não encontrado." };
+  }
+
+  const alunosAtuais = await query<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM professor_tema_alunos WHERE tema_id = $1`,
+    [temaId],
+  );
+  if (Number(alunosAtuais.rows[0]?.total ?? 0) >= 4) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "Cada projeto pode ter no máximo 4 alunos participantes.",
+    };
   }
 
   const nomeCompleto = input.nomeCompleto.trim();

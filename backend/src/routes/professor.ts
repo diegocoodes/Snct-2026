@@ -150,6 +150,7 @@ export async function POST(request: Request) {
       }
       const result = await createTema(panelBefore.escola.id, {
         titulo: typeof body?.titulo === "string" ? body.titulo : "",
+        area: typeof body?.area === "string" ? body.area : "",
         descricao:
           typeof body?.descricao === "string" ? body.descricao : undefined,
       });
@@ -167,6 +168,7 @@ export async function POST(request: Request) {
       }
       const result = await updateTema(temaId, session.userId, {
         titulo: typeof body?.titulo === "string" ? body.titulo : "",
+        area: typeof body?.area === "string" ? body.area : "",
         descricao:
           typeof body?.descricao === "string" ? body.descricao : undefined,
       });

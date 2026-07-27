@@ -6,11 +6,18 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "tsx --env-file=.env src/index.ts",
-    "db:migrate": "node --env-file=.env scripts/migrate.mjs",
-    "db:cleanup": "node --env-file=.env scripts/cleanup-retention.mjs"
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:legacy": "node --env-file=.env scripts/migrate.mjs",
+    "db:studio": "prisma studio",
+    "db:pull": "prisma db pull",
+    "db:cleanup": "node --env-file=.env scripts/cleanup-retention.mjs",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "^6.19.3",
     "better-auth": "^1.6.23",
     "cors": "^2.8.5",
     "express": "^5.1.0",
@@ -24,6 +31,7 @@
     "@types/express": "^5.0.3",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
+    "prisma": "^6.19.3",
     "tsx": "^4.20.5",
     "typescript": "^5"
   }

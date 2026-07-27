@@ -86,6 +86,22 @@ export default async function ProfilePage() {
     );
   }
 
+  if (session.role === "avaliador") {
+    return (
+      <DashboardShell session={session}>
+        <div className="mb-6">
+          <Button
+            variant="glow"
+            render={<Link href="/avaliador/avaliar" />}
+          >
+            Avaliar stands (escanear QR)
+          </Button>
+        </div>
+        <VisitorPass visitor={toPublicUser(visitor)} showSecurity={false} />
+      </DashboardShell>
+    );
+  }
+
   return (
     <DashboardShell session={session}>
       <VisitorPass

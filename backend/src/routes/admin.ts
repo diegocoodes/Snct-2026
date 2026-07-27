@@ -4,7 +4,21 @@ import { requireRole } from "@/lib/auth";
 import { readAuditEvents, recordAuditEvent } from "@/lib/audit";
 import { onlyDigits, isValidCpf } from "@/lib/cpf";
 import { query } from "@/lib/db";
+import {
+  createEstande,
+  deleteEstande,
+  listEstandes,
+  updateEstande,
+  type EstandeStatus,
+} from "@/lib/estandes";
 import { hashPassword, isStrongPassword } from "@/lib/password";
+import {
+  aprovarProjeto,
+  cancelarAprovacaoProjeto,
+  listProjetosAdmin,
+  rejeitarProjeto,
+  type ProjetoStatus,
+} from "@/lib/projetos-admin";
 import {
   assertTrustedMutation,
   enforceRateLimit,
@@ -96,10 +110,19 @@ export async function GET(request: Request) {
   }
 
   const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
-  const [store, auditLogs, roles] = await Promise.all([
+  const projetoStatus = url.searchParams.get("projetoStatus");
+  const [store, auditLogs, roles, estandes, projetos] = await Promise.all([
     readSnctStore(),
     readAuditEvents(100),
     listRoles(),
+    listEstandes(),
+    listProjetosAdmin(
+      projetoStatus === "PENDENTE" ||
+        projetoStatus === "APROVADO" ||
+        projetoStatus === "REJEITADO"
+        ? (projetoStatus as ProjetoStatus)
+        : undefined,
+    ),
   ]);
   const users = q
     ? store.users.filter(
@@ -109,7 +132,7 @@ export async function GET(request: Request) {
           (user.cpf ?? "").includes(onlyDigits(q)),
       )
     : store.users;
-  return Response.json({ ...store, users, auditLogs, roles });
+  return Response.json({ ...store, users, auditLogs, roles, estandes, projetos });
 }
 
 export async function POST(request: Request) {
@@ -519,6 +542,147 @@ export async function PATCH(request: Request) {
         entityId: "1",
       });
       return Response.json({ settings: { eventEdition, heroImageUrl } });
+    }
+
+    if (action === "createEstande") {
+      const result = await createEstande({
+        codigo: clean(body?.codigo, 40),
+        status: (clean(body?.status, 32) || "DISPONIVEL") as EstandeStatus,
+      });
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "estande.create",
+        entity: "estande",
+        entityId: result.estande.id,
+        dadosNovos: result.estande as unknown as Record<string, unknown>,
+      });
+      const estandes = await listEstandes();
+      return Response.json({ estande: result.estande, estandes });
+    }
+
+    if (action === "updateEstande") {
+      const estandeId = clean(body?.estandeId, 64);
+      const statusRaw = clean(body?.status, 32);
+      const result = await updateEstande(estandeId, {
+        codigo: clean(body?.codigo, 40) || undefined,
+        status: statusRaw
+          ? (statusRaw as EstandeStatus)
+          : undefined,
+      });
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "estande.update",
+        entity: "estande",
+        entityId: estandeId,
+        dadosNovos: result.estande as unknown as Record<string, unknown>,
+      });
+      const estandes = await listEstandes();
+      return Response.json({ estande: result.estande, estandes });
+    }
+
+    if (action === "deleteEstande") {
+      const estandeId = clean(body?.estandeId, 64);
+      const result = await deleteEstande(estandeId);
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "estande.delete",
+        entity: "estande",
+        entityId: estandeId,
+      });
+      const estandes = await listEstandes();
+      return Response.json({ success: true, estandes });
+    }
+
+    if (action === "aprovarProjeto") {
+      const projetoId = clean(body?.projetoId, 64);
+      const estandeId = clean(body?.estandeId, 64);
+      if (!projetoId || !estandeId) {
+        return Response.json(
+          { error: "Informe o projeto e o stand disponível." },
+          { status: 400 },
+        );
+      }
+      const result = await aprovarProjeto(projetoId, estandeId);
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "projeto.aprovar",
+        entity: "projeto",
+        entityId: projetoId,
+        dadosNovos: {
+          estandeId,
+          status: "APROVADO",
+        },
+      });
+      const [projetos, estandes] = await Promise.all([
+        listProjetosAdmin(),
+        listEstandes(),
+      ]);
+      return Response.json({ success: true, projetos, estandes });
+    }
+
+    if (action === "rejeitarProjeto") {
+      const projetoId = clean(body?.projetoId, 64);
+      const result = await rejeitarProjeto(projetoId);
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "projeto.rejeitar",
+        entity: "projeto",
+        entityId: projetoId,
+        dadosAnteriores: {
+          estandeId: result.previousEstandeId,
+        },
+        dadosNovos: { status: "REJEITADO" },
+      });
+      const [projetos, estandes] = await Promise.all([
+        listProjetosAdmin(),
+        listEstandes(),
+      ]);
+      return Response.json({ success: true, projetos, estandes });
+    }
+
+    if (action === "cancelarAprovacaoProjeto") {
+      const projetoId = clean(body?.projetoId, 64);
+      const result = await cancelarAprovacaoProjeto(projetoId);
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "projeto.cancelar_aprovacao",
+        entity: "projeto",
+        entityId: projetoId,
+        dadosAnteriores: {
+          estandeId: result.previousEstandeId,
+          status: "APROVADO",
+        },
+        dadosNovos: { status: "PENDENTE", estandeId: null },
+      });
+      const [projetos, estandes] = await Promise.all([
+        listProjetosAdmin(),
+        listEstandes(),
+      ]);
+      return Response.json({ success: true, projetos, estandes });
     }
 
     return Response.json({ error: "Ação inválida." }, { status: 400 });
