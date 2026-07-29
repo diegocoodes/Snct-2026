@@ -168,7 +168,7 @@ function VisitorPass({
                   <p className="font-semibold text-ice-white">Check-in</p>
                   <p className="text-xs text-blue-gray">
                     {visitor.checkedInAt
-                      ? "Já houve check-in registrado"
+                      ? "Check-in concluído"
                       : "Aguardando chegada"}
                   </p>
                 </div>

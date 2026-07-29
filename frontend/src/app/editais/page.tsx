@@ -1,11 +1,14 @@
-import { Download, FileText } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, FileText } from "lucide-react";
 
 import { EventFooter } from "@/components/event/event-footer";
 import { EventHeader } from "@/components/event/event-header";
 import { InternalPageHero } from "@/components/event/internal-page-hero";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/state-panel";
+import { getNoticePeriodLabel } from "@/lib/notices";
 import { readPublicSnctStore } from "@/lib/snct-store";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +24,7 @@ export default async function NoticesPage() {
         <InternalPageHero
           eyebrow="Documentos oficiais"
           title="Editais e inscrições"
-          description="Consulte os editais publicados pela organização, acompanhe os prazos e acesse os documentos anexos."
+          description="Consulte os editais publicados, acompanhe o período de inscrição e acesse o PDF ou o formulário externo."
         />
         <section
           aria-labelledby="notices-list-title"
@@ -37,72 +40,56 @@ export default async function NoticesPage() {
 
             {store.notices.length ? (
               <div className="mt-10 grid gap-4">
-                {store.notices.map((notice) => (
-                  <Card
-                    key={notice.id}
-                    className="border-cyan-electric/12 bg-white/[0.025]"
-                  >
-                    <CardContent>
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <h3 className="font-display text-lg font-semibold leading-7 text-ice-white">
-                            {notice.title}
-                          </h3>
-                          <p className="mt-1 text-sm text-blue-gray">
-                            Inscrições: {notice.registration}
-                          </p>
+                {store.notices.map((notice) => {
+                  const periodLabel = getNoticePeriodLabel(notice);
+                  return (
+                    <Card
+                      key={notice.id}
+                      className="border-cyan-electric/12 bg-white/[0.025]"
+                    >
+                      <CardContent>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="font-display text-lg font-semibold leading-7 text-ice-white">
+                              {notice.title}
+                            </h3>
+                            {notice.description ? (
+                              <p className="mt-2 line-clamp-3 text-sm leading-6 text-blue-gray">
+                                {notice.description}
+                              </p>
+                            ) : null}
+                            <p className="mt-2 text-sm text-blue-gray">
+                              Período de inscrição: {notice.registration}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "h-6 shrink-0 px-2.5",
+                              periodLabel === "Aberto"
+                                ? "border-emerald-400/25 bg-emerald-400/15 text-emerald-300"
+                                : periodLabel === "Em breve"
+                                  ? "border-cyan-electric/25 bg-cyan-electric/10 text-cyan-electric"
+                                  : "border-white/10 bg-white/10 text-blue-gray",
+                            )}
+                          >
+                            {periodLabel}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "h-6 shrink-0 px-2.5 capitalize",
-                            notice.status === "aberto"
-                              ? "border-emerald-400/25 bg-emerald-400/15 text-emerald-300"
-                              : "border-white/10 bg-white/10 text-blue-gray",
-                          )}
-                        >
-                          {notice.status}
-                        </Badge>
-                      </div>
 
-                      {notice.documents.length ? (
-                        <ul className="mt-5 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
-                          {notice.documents.map((document) => (
-                            <li key={document.id}>
-                              <a
-                                href={`/api/documents/${document.id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3 transition-colors hover:border-cyan-electric/30 hover:bg-cyan-electric/[0.05] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-electric"
-                              >
-                                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-cyan-electric/10 text-cyan-electric">
-                                  <FileText className="size-4" aria-hidden />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-semibold text-ice-white">
-                                    {document.name}
-                                  </span>
-                                  <span className="text-xs text-blue-gray">
-                                    {(document.size / 1024 / 1024).toFixed(2)}{" "}
-                                    MB
-                                  </span>
-                                </span>
-                                <Download
-                                  className="size-4 shrink-0 text-cyan-electric"
-                                  aria-hidden
-                                />
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-5 border-t border-white/10 pt-4 text-sm text-blue-gray">
-                          Nenhum documento anexado a este edital.
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                        <div className="mt-5 flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                          <Button
+                            variant="glow"
+                            render={<Link href={`/editais/${notice.id}`} />}
+                          >
+                            <FileText aria-hidden /> Ver edital
+                            <ArrowRight aria-hidden />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
               <EmptyState

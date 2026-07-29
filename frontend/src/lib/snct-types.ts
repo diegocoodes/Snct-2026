@@ -96,11 +96,17 @@ export type ManagedNoticeDocument = {
   size: number;
 };
 
+export type NoticeStatus = "aberto" | "encerrado";
+
 export type ManagedNotice = {
   id: string;
   title: string;
+  description: string;
   registration: string;
-  status: "aberto" | "encerrado";
+  registrationStartsAt?: string;
+  registrationEndsAt?: string;
+  formUrl: string;
+  status: NoticeStatus;
   documents: ManagedNoticeDocument[];
 };
 

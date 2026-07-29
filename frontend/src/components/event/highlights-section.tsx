@@ -1,27 +1,52 @@
-import { ArrowLeft, ArrowRight, FileText } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { featuredNotices, upcomingEvents } from "@/config/highlights";
 import type { UpcomingEvent } from "@/config/highlights";
-import type { ManagedNotice } from "@/lib/snct-types";
+import { filterCalendarEvents, formatEventDateBr } from "@/lib/events";
+import { getNoticePeriodLabel } from "@/lib/notices";
+import type { ManagedEvent, ManagedNotice } from "@/lib/snct-types";
 import { cn } from "@/lib/utils";
 
 const defaultNotices: ManagedNotice[] = featuredNotices.map(
   (notice, index) => ({
     id: `notice-${index + 1}`,
-    ...notice,
+    title: notice.title,
+    description: notice.description,
+    registration: notice.registration,
+    registrationStartsAt: notice.registrationStartsAt,
+    registrationEndsAt: notice.registrationEndsAt,
+    formUrl: notice.formUrl ?? "",
+    status: notice.status,
     documents: [],
   }),
 );
 
+const defaultEvents: ManagedEvent[] = upcomingEvents.map((event, index) => ({
+  id: `event-${index + 1}`,
+  ...event,
+}));
+
 function HighlightsSection({
-  events = upcomingEvents,
+  events = defaultEvents,
   notices = defaultNotices,
 }: {
-  events?: readonly (UpcomingEvent & { id?: string })[];
+  events?:
+    | readonly ManagedEvent[]
+    | readonly (UpcomingEvent & { id?: string })[];
   notices?: readonly ManagedNotice[];
 }) {
+  const calendarEvents = filterCalendarEvents(
+    events.map((event, index) => ({
+      id: event.id ?? `event-${index + 1}`,
+      date: event.date,
+      time: event.time,
+      title: event.title,
+      location: event.location,
+    })),
+  );
+
   return (
     <section
       id="destaques"
@@ -38,12 +63,12 @@ function HighlightsSection({
       />
 
       <h2 id="highlights-title" className="sr-only">
-        Editais e próximos eventos
+        Editais e calendário
       </h2>
 
       <div className="relative mx-auto max-w-7xl">
         <nav
-          aria-label="Navegação entre editais e eventos"
+          aria-label="Navegação entre editais e calendário"
           className="mb-8 flex justify-end gap-2"
         >
           <Button
@@ -66,7 +91,7 @@ function HighlightsSection({
             render={
               <a
                 href="#upcoming-events-title"
-                aria-label="Ir para próximos eventos"
+                aria-label="Ir para o calendário"
               />
             }
           >
@@ -92,51 +117,40 @@ function HighlightsSection({
             </div>
 
             <ul className="mt-5 divide-y divide-white/15">
-              {notices.slice(0, 5).map((notice) => (
-                <li
-                  key={notice.id}
-                  className="flex items-start justify-between gap-4 py-4 first:pt-0"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm leading-6 font-semibold text-ice-white/85 sm:text-base">
-                      {notice.title}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-5 text-blue-gray sm:text-sm">
-                      Inscrições: {notice.registration}
-                    </p>
-                    {notice.documents.length ? (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {notice.documents.slice(0, 2).map((document) => (
-                          <a
-                            key={document.id}
-                            href={`/api/documents/${document.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-cyan-electric/15 bg-cyan-electric/[0.06] px-2 py-1 text-xs text-cyan-electric underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-electric"
-                          >
-                            <FileText
-                              className="size-3.5 shrink-0"
-                              aria-hidden
-                            />
-                            <span className="truncate">{document.name}</span>
-                          </a>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "mt-0.5 h-6 shrink-0 px-2.5 capitalize",
-                      notice.status === "aberto"
-                        ? "border-emerald-400/25 bg-emerald-400/15 text-emerald-300"
-                        : "border-white/10 bg-white/10 text-blue-gray",
-                    )}
+              {notices.slice(0, 5).map((notice) => {
+                const periodLabel = getNoticePeriodLabel(notice);
+                return (
+                  <li
+                    key={notice.id}
+                    className="flex items-start justify-between gap-4 py-4 first:pt-0"
                   >
-                    {notice.status}
-                  </Badge>
-                </li>
-              ))}
+                    <div className="min-w-0">
+                      <a
+                        href={`/editais/${notice.id}`}
+                        className="text-sm leading-6 font-semibold text-ice-white/85 transition-colors hover:text-cyan-electric sm:text-base"
+                      >
+                        {notice.title}
+                      </a>
+                      <p className="mt-0.5 text-xs leading-5 text-blue-gray sm:text-sm">
+                        Inscrições: {notice.registration}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "mt-0.5 h-6 shrink-0 px-2.5",
+                        periodLabel === "Aberto"
+                          ? "border-emerald-400/25 bg-emerald-400/15 text-emerald-300"
+                          : periodLabel === "Em breve"
+                            ? "border-cyan-electric/25 bg-cyan-electric/10 text-cyan-electric"
+                            : "border-white/10 bg-white/10 text-blue-gray",
+                      )}
+                    >
+                      {periodLabel}
+                    </Badge>
+                  </li>
+                );
+              })}
             </ul>
           </article>
 
@@ -146,7 +160,7 @@ function HighlightsSection({
                 id="upcoming-events-title"
                 className="font-display text-2xl font-semibold tracking-tight text-ice-white sm:text-3xl"
               >
-                Próximos eventos
+                Calendário
               </h3>
               <a
                 href="/programacao"
@@ -156,30 +170,39 @@ function HighlightsSection({
               </a>
             </div>
 
-            <ol className="relative mt-7 space-y-6 border-l border-cyan-electric/25">
-              {events.map((event) => (
-                <li
-                  key={event.id ?? `${event.date}-${event.time}-${event.title}`}
-                  className="relative grid gap-1 pl-6 sm:grid-cols-[6rem_1fr] sm:gap-4"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="absolute -left-[5px] top-1.5 size-2.5 rounded-full bg-cyan-electric shadow-[0_0_14px_rgb(0_229_255/60%)]"
-                  />
-                  <time className="text-sm font-semibold text-[#9AB7C8]">
-                    {event.date} {event.time}
-                  </time>
-                  <div>
-                    <p className="text-sm leading-6 font-semibold text-ice-white/85 sm:text-base">
-                      {event.title}
-                    </p>
-                    <p className="mt-0.5 text-xs tracking-wide text-blue-gray uppercase">
-                      {event.location}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            {calendarEvents.length ? (
+              <ol className="relative mt-7 space-y-6 border-l border-cyan-electric/25">
+                {calendarEvents.map((event) => (
+                  <li
+                    key={event.id}
+                    className="relative grid gap-1 pl-6 sm:grid-cols-[7.5rem_1fr] sm:gap-4"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute -left-[5px] top-1.5 size-2.5 rounded-full bg-cyan-electric shadow-[0_0_14px_rgb(0_229_255/60%)]"
+                    />
+                    <time
+                      dateTime={`${event.date}T${event.time}`}
+                      className="text-sm font-semibold text-[#9AB7C8]"
+                    >
+                      {formatEventDateBr(event.date)} {event.time}
+                    </time>
+                    <div>
+                      <p className="text-sm leading-6 font-semibold text-ice-white/85 sm:text-base">
+                        {event.title}
+                      </p>
+                      <p className="mt-0.5 text-xs tracking-wide text-blue-gray uppercase">
+                        {event.location}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-7 text-sm leading-6 text-blue-gray">
+                Nenhum evento agendado para hoje ou para os próximos dias.
+              </p>
+            )}
           </article>
         </div>
       </div>

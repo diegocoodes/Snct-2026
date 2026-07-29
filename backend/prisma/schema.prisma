@@ -215,14 +215,18 @@ model SnctEvent {
 }
 
 model SnctNotice {
-  id           String               @id @db.VarChar(64)
-  title        String               @db.Text
-  registration String               @db.Text
-  status       String               @db.VarChar(32)
-  sortOrder    Int                  @default(0) @map("sort_order")
-  createdAt    DateTime             @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
-  documents    SnctNoticeDocument[]
+  id                    String               @id @db.VarChar(64)
+  title                 String               @db.Text
+  description           String               @db.Text
+  registration          String               @db.Text
+  registrationStartsAt  DateTime?            @map("registration_starts_at") @db.Date
+  registrationEndsAt    DateTime?            @map("registration_ends_at") @db.Date
+  formUrl               String               @map("form_url") @db.Text
+  status                String               @db.VarChar(32)
+  sortOrder             Int                  @default(0) @map("sort_order")
+  createdAt             DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  documents             SnctNoticeDocument[]
 
   @@map("snct_notices")
 }

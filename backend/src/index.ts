@@ -124,6 +124,9 @@ mount("post", "/api/checkins", checkins.POST_CHECKIN);
 mount("get", "/api/uploads/fotos/:filename", (request, filename) =>
   uploads.GET_FOTO(request, filename),
 );
+mount("get", "/api/uploads/parceiros/:filename", (request, filename) =>
+  uploads.GET_PARCEIRO(request, filename),
+);
 mount("get", "/api/documents/:id", documents.GET);
 
 assertDatabaseConfigured();

@@ -14,9 +14,9 @@ Depois do bootstrap, alterar a senha no ambiente não substitui o hash do banco.
 
 - **Portal:** assinatura da edição e imagem principal autorizada.
 - **Usuários:** visitantes/equipe, e-mail verificado e estado do MFA.
-- **Programação:** atividades, horários e locais.
+- **Programação:** atividades com data completa (dia/mês/ano), horários e locais. A Home (Calendário) mostra só o dia atual e futuros; a página Programação exibe o histórico completo.
 - **Editais:** período, status e documentos.
-- **Parceiros:** nome e URL HTTPS de host autorizado.
+- **Parceiros:** nome e arquivo de logomarca (PNG, WebP, JPEG ou SVG).
 - **Auditoria:** últimas ações sensíveis e resultados.
 
 ## Usuários
@@ -27,9 +27,13 @@ O painel não permite excluir a conta administrativa inicial. Exclusões de outr
 
 ## Editais e anexos
 
-Formatos: PDF, DOC, DOCX, ODT, XLS e XLSX, até 10 MB.
+Campos: título, descrição, data de início, data de encerramento, PDF e link externo do formulário (Google Forms, Microsoft Forms ou sistema próprio).
 
-O servidor compara assinatura e extensão, consulta o ClamAV, calcula SHA-256, criptografa com AES-256-GCM e só então grava no PostgreSQL. Em produção, falha do antivírus ou ausência da chave bloqueia o upload. Documentos são baixados como anexo em contexto sandbox.
+O status de inscrição é calculado automaticamente pelas datas. Após o encerramento, o botão público exibe **Inscrições Encerradas**.
+
+Formatos de anexo: PDF (preferencial), além de DOC, DOCX, ODT, XLS e XLSX, até 10 MB.
+
+O servidor compara assinatura e extensão, consulta o ClamAV, calcula SHA-256, criptografa com AES-256-GCM e só então grava no banco. Em produção, falha do antivírus ou ausência da chave bloqueia o upload. Documentos são baixados como anexo em contexto sandbox.
 
 ## Operação do evento
 

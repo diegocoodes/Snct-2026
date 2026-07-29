@@ -194,7 +194,7 @@ function HeroSection({
               </motion.span>
               <motion.span
                 variants={itemVariants}
-                className="mt-2 block bg-gradient-to-r from-cyan-electric via-purple-vibrant to-magenta-neon bg-clip-text text-5xl leading-[1.02] font-bold tracking-[-.045em] text-transparent sm:text-6xl lg:text-7xl xl:text-[5.2rem]"
+                className="mt-2 block overflow-visible bg-gradient-to-r from-cyan-electric via-purple-vibrant to-magenta-neon bg-clip-text pb-[.12em] pr-[.08em] text-5xl leading-[1.08] font-bold tracking-[-.045em] text-transparent sm:text-6xl lg:text-7xl xl:text-[4.85rem]"
               >
                 Ciência e Tecnologia
               </motion.span>

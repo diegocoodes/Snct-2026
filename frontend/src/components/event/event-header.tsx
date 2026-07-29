@@ -14,7 +14,8 @@ import {
   MapPinned,
   Menu,
   Newspaper,
-  Sparkles,
+  QrCode,
+  ScanLine,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -99,11 +100,14 @@ function EventHeader() {
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex">
+          <Button variant="outline" render={<Link href="/credencial" />}>
+            <QrCode aria-hidden /> Credencial
+          </Button>
           <Button
             variant="glow"
-            render={<Link href="/credencial" />}
+            render={<Link href="/totem" />}
           >
-            Credencial
+            Totem
           </Button>
           <Button variant="ghost" render={<Link href="/login" />}>
             <LogIn aria-hidden /> Entrar
@@ -206,22 +210,22 @@ function EventHeader() {
               <SheetClose
                 render={
                   <Link
-                    href="/credencial"
+                    href="/totem"
                     className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-cyan-electric/30 bg-cyan-electric/10 px-4 text-sm font-semibold text-cyan-electric shadow-[0_0_24px_rgb(0_229_255/12%)] hover:bg-cyan-electric/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-electric"
                   />
                 }
               >
-                Credencial
+                <ScanLine className="size-4" aria-hidden /> Totem
               </SheetClose>
               <SheetClose
                 render={
                   <Link
-                    href="/auth/inscricao"
+                    href="/credencial"
                     className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-vibrant to-[#8B20FF] px-4 text-sm font-semibold text-white shadow-[0_12px_30px_rgb(106_0_255/28%)] transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-electric motion-reduce:transition-none"
                   />
                 }
               >
-                <Sparkles className="size-4" aria-hidden /> Criar credencial
+                <QrCode className="size-4" aria-hidden /> Buscar credencial
               </SheetClose>
               <SheetClose
                 render={

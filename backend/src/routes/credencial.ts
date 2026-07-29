@@ -1,5 +1,6 @@
 import { mapUsuarioRow } from "@/lib/auth";
 import { recordAuditEvent } from "@/lib/audit";
+import { todayInEventTimezone } from "@/lib/checkins";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import { query } from "@/lib/db";
 import {
@@ -53,6 +54,7 @@ export async function POST_VISITANTE_CPF(request: Request) {
       );
     }
 
+    const today = todayInEventTimezone();
     const result = await query<UsuarioCredencialRow>(
       `SELECT u.id, u.role_id, u.nome_completo, u.email, u.telefone, u.cpf,
               u.senha_hash, u.data_nascimento, u.foto, u.aceitou_direito_imagem,
@@ -60,7 +62,7 @@ export async function POST_VISITANTE_CPF(request: Request) {
               r.codigo AS role_codigo, r.nome AS role_nome,
               EXISTS(
                 SELECT 1 FROM checkins c
-                WHERE c.usuario_id = u.id AND c.data_checkin = CURDATE()
+                WHERE c.usuario_id = u.id AND c.data_checkin = $2
               ) AS checkin_hoje
        FROM usuarios u
        INNER JOIN roles r ON r.id = u.role_id
@@ -68,7 +70,7 @@ export async function POST_VISITANTE_CPF(request: Request) {
          AND r.codigo IN ('VISITANTE', 'ALUNO', 'PROFESSOR', 'AVALIADOR')
          AND u.ativo = TRUE
        LIMIT 1`,
-      [cpf],
+      [cpf, today],
     );
 
     const row = result.rows[0];

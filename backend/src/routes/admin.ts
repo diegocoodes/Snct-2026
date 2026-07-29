@@ -29,6 +29,18 @@ import {
   listRoles,
 } from "@/lib/roles";
 import {
+  normalizeEventDate,
+} from "@/lib/events";
+import {
+  deletePartnerLogoFile,
+  savePartnerLogo,
+} from "@/lib/partners";
+import {
+  formatRegistrationPeriod,
+  isValidHttpUrl,
+  resolveNoticeStatus,
+} from "@/lib/notices";
+import {
   deleteNoticeDocumentFile,
   readSnctStore,
   saveNoticeDocument,
@@ -137,6 +149,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let uploadedDocument: ManagedNoticeDocument | undefined;
+  let uploadedPartnerLogo: string | undefined;
   try {
     const session = await authorizeMutation(request);
     if (!session)
@@ -144,20 +157,84 @@ export async function POST(request: Request) {
 
     const formData = await request.formData().catch(() => null);
     const action = clean(formData?.get("action"));
-    if (action !== "saveNotice" || !formData) {
+    if (!formData || (action !== "saveNotice" && action !== "addPartner")) {
       return Response.json({ error: "Ação inválida." }, { status: 400 });
     }
 
+    if (action === "addPartner") {
+      const name = clean(formData.get("name"), 160);
+      const logoFile = formData.get("logo");
+      if (!name) {
+        return Response.json(
+          { error: "Informe o nome da instituição." },
+          { status: 400 },
+        );
+      }
+      if (!(logoFile instanceof File) || logoFile.size <= 0) {
+        return Response.json(
+          { error: "Anexe o arquivo da logomarca." },
+          { status: 400 },
+        );
+      }
+
+      uploadedPartnerLogo = await savePartnerLogo(logoFile);
+      const partner: ManagedPartner = {
+        id: `partner-${randomUUID()}`,
+        name,
+        logo: uploadedPartnerLogo,
+      };
+      await updateSnctStore((store) => store.partners.push(partner));
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "partner.create",
+        entity: "partner",
+        entityId: partner.id,
+      });
+      return Response.json({ partner });
+    }
+
     const title = clean(formData.get("title"), 220);
-    const registration = clean(formData.get("registration"), 180);
-    const status =
-      formData.get("status") === "encerrado" ? "encerrado" : "aberto";
+    const description = clean(formData.get("description"), 8000);
+    const registrationStartsAt = clean(formData.get("registrationStartsAt"), 10);
+    const registrationEndsAt = clean(formData.get("registrationEndsAt"), 10);
+    const formUrlRaw = clean(formData.get("formUrl"), 2000);
     const id = clean(formData.get("id"), 100) || `notice-${randomUUID()}`;
     const document = formData.get("document");
 
-    if (!title || !registration) {
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!title || !description) {
       return Response.json(
-        { error: "Informe o título e o período de inscrições." },
+        { error: "Informe o título e a descrição do edital." },
+        { status: 400 },
+      );
+    }
+    if (
+      !registrationStartsAt ||
+      !registrationEndsAt ||
+      !datePattern.test(registrationStartsAt) ||
+      !datePattern.test(registrationEndsAt)
+    ) {
+      return Response.json(
+        { error: "Informe as datas de início e encerramento das inscrições." },
+        { status: 400 },
+      );
+    }
+    if (registrationEndsAt < registrationStartsAt) {
+      return Response.json(
+        {
+          error:
+            "A data de encerramento deve ser igual ou posterior à data de início.",
+        },
+        { status: 400 },
+      );
+    }
+    if (formUrlRaw && !isValidHttpUrl(formUrlRaw)) {
+      return Response.json(
+        {
+          error:
+            "Informe um link válido (http/https) para o formulário de inscrição.",
+        },
         { status: 400 },
       );
     }
@@ -166,6 +243,16 @@ export async function POST(request: Request) {
       uploadedDocument = await saveNoticeDocument(document);
     }
 
+    const registration = formatRegistrationPeriod(
+      registrationStartsAt,
+      registrationEndsAt,
+    );
+    const status = resolveNoticeStatus({
+      registrationStartsAt,
+      registrationEndsAt,
+      status: "aberto",
+    });
+
     const notice = await updateSnctStore<ManagedNotice>((store) => {
       const index = store.notices.findIndex((item) => item.id === id);
       const documents = index >= 0 ? [...store.notices[index].documents] : [];
@@ -173,7 +260,11 @@ export async function POST(request: Request) {
       const nextNotice: ManagedNotice = {
         id,
         title,
+        description,
         registration,
+        registrationStartsAt,
+        registrationEndsAt,
+        formUrl: formUrlRaw,
         status,
         documents,
       };
@@ -196,6 +287,9 @@ export async function POST(request: Request) {
       await deleteNoticeDocumentFile(uploadedDocument.storageName).catch(
         () => {},
       );
+    }
+    if (uploadedPartnerLogo) {
+      await deletePartnerLogoFile(uploadedPartnerLogo).catch(() => {});
     }
     return securityErrorResponse(error);
   }
@@ -396,14 +490,25 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "saveEvent") {
+      const normalizedDate = normalizeEventDate(clean(body?.date, 30));
+      const time = clean(body?.time, 20);
       const event: ManagedEvent = {
         id: clean(body?.id, 100) || `event-${randomUUID()}`,
-        date: clean(body?.date, 30),
-        time: clean(body?.time, 20),
+        date: normalizedDate ?? "",
+        time: /^\d{2}:\d{2}$/.test(time) ? time : "",
         title: clean(body?.title, 220),
         location: clean(body?.location, 180),
       };
-      if (!event.date || !event.time || !event.title || !event.location) {
+      if (!normalizedDate) {
+        return Response.json(
+          {
+            error:
+              "Informe a data completa do evento no formato dia/mês/ano (ex.: 29/07/2026).",
+          },
+          { status: 400 },
+        );
+      }
+      if (!event.time || !event.title || !event.location) {
         return Response.json(
           { error: "Preencha todos os dados do evento." },
           { status: 400 },
@@ -483,33 +588,25 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "addPartner") {
-      const partner: ManagedPartner = {
-        id: `partner-${randomUUID()}`,
-        name: clean(body?.name, 160),
-        logo: clean(body?.logo, 600),
-      };
-      if (!partner.name || !isAllowedImageUrl(partner.logo)) {
-        return Response.json(
-          { error: "Use um nome e uma URL HTTPS de domínio autorizado." },
-          { status: 400 },
-        );
-      }
-      await updateSnctStore((store) => store.partners.push(partner));
-      await recordAuditEvent(request, {
-        actorId: session.userId,
-        actorRole: session.role,
-        action: "partner.create",
-        entity: "partner",
-        entityId: partner.id,
-      });
-      return Response.json({ partner });
+      return Response.json(
+        {
+          error:
+            "Envie a logomarca como arquivo pelo formulário de parceiros.",
+        },
+        { status: 400 },
+      );
     }
 
     if (action === "deletePartner") {
       const id = clean(body?.id, 100);
-      await updateSnctStore((store) => {
-        store.partners = store.partners.filter((partner) => partner.id !== id);
-      });
+      const removed = await updateSnctStore<ManagedPartner | undefined>(
+        (store) => {
+          const partner = store.partners.find((item) => item.id === id);
+          store.partners = store.partners.filter((item) => item.id !== id);
+          return partner;
+        },
+      );
+      if (removed?.logo) await deletePartnerLogoFile(removed.logo);
       await recordAuditEvent(request, {
         actorId: session.userId,
         actorRole: session.role,

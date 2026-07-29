@@ -9,6 +9,12 @@ import { mapUsuarioRow } from "@/lib/auth";
 import { assertFileIsClean } from "@/lib/clamav";
 import { query, transaction, clientQuery, clientExecute } from "@/lib/db";
 import { decryptFile, encryptFile } from "@/lib/encryption";
+import { normalizeEventDate } from "@/lib/events";
+import {
+  formatRegistrationPeriod,
+  mapNoticeRow,
+  resolveNoticeStatus,
+} from "@/lib/notices";
 import type {
   ManagedNoticeDocument,
   SnctStore,
@@ -88,13 +94,27 @@ async function ensureDomainSeeded() {
         await clientQuery(
           client,
           `INSERT INTO snct_notices
-            (id, title, registration, status, sort_order)
-           VALUES ($1, $2, $3, $4, $5)`,
+            (id, title, description, registration,
+             registration_starts_at, registration_ends_at, form_url,
+             status, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             `notice-${index + 1}`,
             notice.title,
-            notice.registration,
-            notice.status,
+            notice.description,
+            formatRegistrationPeriod(
+              notice.registrationStartsAt,
+              notice.registrationEndsAt,
+              notice.registration,
+            ),
+            notice.registrationStartsAt ?? null,
+            notice.registrationEndsAt ?? null,
+            notice.formUrl ?? "",
+            resolveNoticeStatus({
+              registrationStartsAt: notice.registrationStartsAt,
+              registrationEndsAt: notice.registrationEndsAt,
+              status: notice.status,
+            }),
             index,
           ],
         );
@@ -162,10 +182,15 @@ async function readStore(client?: PoolConnection) {
       run<{
         id: string;
         title: string;
+        description: string | null;
         registration: string;
+        registration_starts_at: Date | string | null;
+        registration_ends_at: Date | string | null;
+        form_url: string | null;
         status: "aberto" | "encerrado";
       } & RowDataPacket>(`
-        SELECT id, title, registration, status
+        SELECT id, title, description, registration,
+               registration_starts_at, registration_ends_at, form_url, status
         FROM snct_notices ORDER BY sort_order, created_at
       `),
       run<{
@@ -199,23 +224,26 @@ async function readStore(client?: PoolConnection) {
     users: publicUsers,
     events: events.rows.map((row) => ({
       id: row.id,
-      date: row.event_date,
+      date: normalizeEventDate(row.event_date) ?? row.event_date,
       time: row.event_time,
       title: row.title,
       location: row.location,
     })),
-    notices: notices.rows.map((notice) => ({
-      ...notice,
-      documents: documents.rows
-        .filter((document) => document.notice_id === notice.id)
-        .map((document) => ({
-          id: document.id,
-          name: document.original_name,
-          storageName: document.storage_name,
-          mimeType: document.mime_type,
-          size: document.byte_size,
-        })),
-    })),
+    notices: notices.rows.map((notice) => {
+      const mapped = mapNoticeRow(notice);
+      return {
+        ...mapped,
+        documents: documents.rows
+          .filter((document) => document.notice_id === notice.id)
+          .map((document) => ({
+            id: document.id,
+            name: document.original_name,
+            storageName: document.storage_name,
+            mimeType: document.mime_type,
+            size: document.byte_size,
+          })),
+      };
+    }),
     partners: managedPartners.rows,
     settings: settings.rows[0]
       ? {
@@ -259,7 +287,7 @@ async function syncContent(client: PoolConnection, store: SnctStore) {
          event_date = VALUES(event_date), event_time = VALUES(event_time),
          title = VALUES(title), location = VALUES(location),
          sort_order = VALUES(sort_order), updated_at = now()`,
-      [event.id, event.date, event.time, event.title, event.location, index],
+      [event.id, normalizeEventDate(event.date) ?? event.date, event.time, event.title, event.location, index],
     );
   }
   await deleteMissingIds(
@@ -269,16 +297,37 @@ async function syncContent(client: PoolConnection, store: SnctStore) {
   );
 
   for (const [index, notice] of store.notices.entries()) {
+    const status = resolveNoticeStatus(notice);
+    const registration = formatRegistrationPeriod(
+      notice.registrationStartsAt,
+      notice.registrationEndsAt,
+      notice.registration,
+    );
     await clientQuery(
       client,
       `INSERT INTO snct_notices
-        (id, title, registration, status, sort_order, updated_at)
-       VALUES ($1, $2, $3, $4, $5, now())
+        (id, title, description, registration,
+         registration_starts_at, registration_ends_at, form_url,
+         status, sort_order, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
        ON DUPLICATE KEY UPDATE
-         title = VALUES(title), registration = VALUES(registration),
-         status = VALUES(status), sort_order = VALUES(sort_order),
-         updated_at = now()`,
-      [notice.id, notice.title, notice.registration, notice.status, index],
+         title = VALUES(title), description = VALUES(description),
+         registration = VALUES(registration),
+         registration_starts_at = VALUES(registration_starts_at),
+         registration_ends_at = VALUES(registration_ends_at),
+         form_url = VALUES(form_url), status = VALUES(status),
+         sort_order = VALUES(sort_order), updated_at = now()`,
+      [
+        notice.id,
+        notice.title,
+        notice.description ?? "",
+        registration,
+        notice.registrationStartsAt ?? null,
+        notice.registrationEndsAt ?? null,
+        notice.formUrl ?? "",
+        status,
+        index,
+      ],
     );
     for (const document of notice.documents) {
       await clientQuery(

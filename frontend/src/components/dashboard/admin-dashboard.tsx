@@ -6,13 +6,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
-  FileText,
   FolderKanban,
   Gift,
   LayoutGrid,
   LoaderCircle,
   Megaphone,
-  Paperclip,
   PencilLine,
   Plus,
   Save,
@@ -25,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminEditaisPanel } from "@/components/dashboard/admin-editais-panel";
 import { AdminEstandesPanel } from "@/components/dashboard/admin-estandes-panel";
 import { AdminProjetosPanel } from "@/components/dashboard/admin-projetos-panel";
 import { Badge } from "@/components/ui/badge";
@@ -83,24 +82,6 @@ function AdminDashboard({
     const result = (await response.json()) as { error?: string };
     if (!response.ok)
       toast.error(result.error ?? "Não foi possível salvar a alteração.");
-    else {
-      toast.success(successMessage);
-      router.refresh();
-    }
-    setBusyAction("");
-    return response.ok;
-  }
-
-  async function mutateForm(payload: FormData, successMessage: string) {
-    const id = String(payload.get("id") ?? "new");
-    setBusyAction(`saveNotice-${id}`);
-    const response = await secureFetch("/api/admin", {
-      method: "POST",
-      body: payload,
-    });
-    const result = (await response.json()) as { error?: string };
-    if (!response.ok)
-      toast.error(result.error ?? "Não foi possível salvar o edital.");
     else {
       toast.success(successMessage);
       router.refresh();
@@ -448,11 +429,16 @@ function AdminDashboard({
         <TabsContent value="events" className="pt-7">
           <Card className="border-magenta-neon/15">
             <CardHeader>
-              <CardTitle>Adicionar próximo evento</CardTitle>
+              <CardTitle>Adicionar evento</CardTitle>
+              <p className="text-sm text-blue-gray">
+                Informe a data completa (dia, mês e ano). A Home (Calendário)
+                mostra só o dia atual e os futuros; a Programação guarda o
+                histórico completo.
+              </p>
             </CardHeader>
             <CardContent>
               <form
-                className="grid gap-4 md:grid-cols-[.7fr_.7fr_1.6fr_1.2fr_auto] md:items-end"
+                className="grid gap-4 md:grid-cols-[.9fr_.7fr_1.5fr_1.2fr_auto] md:items-end"
                 onSubmit={async (event) => {
                   event.preventDefault();
                   const success = await mutate(
@@ -467,7 +453,7 @@ function AdminDashboard({
                   <Input
                     id="new-event-date"
                     name="date"
-                    placeholder="24/10"
+                    type="date"
                     required
                   />
                 </div>
@@ -476,7 +462,7 @@ function AdminDashboard({
                   <Input
                     id="new-event-time"
                     name="time"
-                    placeholder="09:00"
+                    type="time"
                     required
                   />
                 </div>
@@ -500,7 +486,7 @@ function AdminDashboard({
               <Card key={event.id} size="sm">
                 <CardContent>
                   <form
-                    className="grid gap-3 md:grid-cols-[.65fr_.65fr_1.5fr_1.15fr_auto] md:items-end"
+                    className="grid gap-3 md:grid-cols-[.85fr_.65fr_1.4fr_1.15fr_auto] md:items-end"
                     onSubmit={(formEvent) => {
                       formEvent.preventDefault();
                       void mutate(
@@ -518,6 +504,7 @@ function AdminDashboard({
                       <Input
                         id={`${event.id}-date`}
                         name="date"
+                        type="date"
                         defaultValue={event.date}
                         required
                       />
@@ -527,6 +514,7 @@ function AdminDashboard({
                       <Input
                         id={`${event.id}-time`}
                         name="time"
+                        type="time"
                         defaultValue={event.time}
                         required
                       />
@@ -554,6 +542,7 @@ function AdminDashboard({
                         type="submit"
                         size="icon"
                         aria-label={`Salvar ${event.title}`}
+                        disabled={busyAction === `saveEvent-${event.id}`}
                       >
                         <Save aria-hidden />
                       </Button>
@@ -564,7 +553,9 @@ function AdminDashboard({
                         aria-label={`Excluir ${event.title}`}
                         onClick={() => {
                           if (
-                            window.confirm(`Excluir o evento “${event.title}”?`)
+                            window.confirm(
+                              `Excluir o evento “${event.title}”?`,
+                            )
                           )
                             void mutate(
                               { action: "deleteEvent", id: event.id },
@@ -583,220 +574,7 @@ function AdminDashboard({
         </TabsContent>
 
         <TabsContent value="notices" className="pt-7">
-          <Card className="border-cyan-electric/20">
-            <CardHeader>
-              <CardTitle>Novo edital</CardTitle>
-              <p className="text-sm leading-6 text-blue-gray">
-                Publique o edital e anexe documentos em PDF, DOC, DOCX, ODT, XLS
-                ou XLSX de até 10 MB.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <form
-                encType="multipart/form-data"
-                className="grid gap-4 lg:grid-cols-[1.5fr_1fr_.7fr_1.2fr_auto] lg:items-end"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  const success = await mutateForm(
-                    new FormData(event.currentTarget),
-                    "Edital publicado.",
-                  );
-                  if (success) event.currentTarget.reset();
-                }}
-              >
-                <input type="hidden" name="action" value="saveNotice" />
-                <div className="space-y-2">
-                  <Label htmlFor="new-notice-title">Título</Label>
-                  <Input id="new-notice-title" name="title" required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-notice-registration">Inscrições</Label>
-                  <Input
-                    id="new-notice-registration"
-                    name="registration"
-                    placeholder="06/11–26/11/2026"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-notice-status">Status</Label>
-                  <select
-                    id="new-notice-status"
-                    name="status"
-                    defaultValue="aberto"
-                    className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                  >
-                    <option value="aberto">Aberto</option>
-                    <option value="encerrado">Encerrado</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-notice-document">Documento</Label>
-                  <Input
-                    id="new-notice-document"
-                    name="document"
-                    type="file"
-                    accept=".pdf,.doc,.docx,.odt,.xls,.xlsx"
-                    className="pt-1.5"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  disabled={busyAction === "saveNotice-new"}
-                >
-                  <Plus aria-hidden /> Publicar
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <div className="mt-5 grid gap-4">
-            {notices.map((notice) => (
-              <Card key={notice.id} size="sm">
-                <CardContent>
-                  <form
-                    encType="multipart/form-data"
-                    className="grid gap-4 lg:grid-cols-[1.5fr_1fr_.7fr_1.2fr_auto] lg:items-end"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void mutateForm(
-                        new FormData(event.currentTarget),
-                        "Edital atualizado.",
-                      );
-                    }}
-                  >
-                    <input type="hidden" name="action" value="saveNotice" />
-                    <input type="hidden" name="id" value={notice.id} />
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`${notice.id}-title`}>Título</Label>
-                      <Input
-                        id={`${notice.id}-title`}
-                        name="title"
-                        defaultValue={notice.title}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`${notice.id}-registration`}>
-                        Inscrições
-                      </Label>
-                      <Input
-                        id={`${notice.id}-registration`}
-                        name="registration"
-                        defaultValue={notice.registration}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`${notice.id}-status`}>Status</Label>
-                      <select
-                        id={`${notice.id}-status`}
-                        name="status"
-                        defaultValue={notice.status}
-                        className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                      >
-                        <option value="aberto">Aberto</option>
-                        <option value="encerrado">Encerrado</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`${notice.id}-document`}>
-                        Anexar outro documento
-                      </Label>
-                      <Input
-                        id={`${notice.id}-document`}
-                        name="document"
-                        type="file"
-                        accept=".pdf,.doc,.docx,.odt,.xls,.xlsx"
-                        className="pt-1.5"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        type="submit"
-                        size="icon"
-                        aria-label={`Salvar ${notice.title}`}
-                        disabled={busyAction === `saveNotice-${notice.id}`}
-                      >
-                        <Save aria-hidden />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="destructive"
-                        aria-label={`Excluir ${notice.title}`}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Excluir o edital “${notice.title}”?`,
-                            )
-                          )
-                            void mutate(
-                              { action: "deleteNotice", id: notice.id },
-                              "Edital excluído.",
-                            );
-                        }}
-                      >
-                        <Trash2 aria-hidden />
-                      </Button>
-                    </div>
-                  </form>
-
-                  {notice.documents.length ? (
-                    <ul className="mt-5 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
-                      {notice.documents.map((document) => (
-                        <li
-                          key={document.id}
-                          className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3"
-                        >
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-cyan-electric/10 text-cyan-electric">
-                            <FileText className="size-4" aria-hidden />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <a
-                              href={`/api/documents/${document.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block truncate text-sm font-semibold text-ice-white underline-offset-4 hover:text-cyan-electric hover:underline"
-                            >
-                              {document.name}
-                            </a>
-                            <p className="text-xs text-blue-gray">
-                              {(document.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="destructive"
-                            aria-label={`Remover documento ${document.name}`}
-                            onClick={() => {
-                              if (window.confirm(`Remover “${document.name}”?`))
-                                void mutate(
-                                  {
-                                    action: "deleteNoticeDocument",
-                                    noticeId: notice.id,
-                                    documentId: document.id,
-                                  },
-                                  "Documento removido.",
-                                );
-                            }}
-                          >
-                            <Trash2 aria-hidden />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4 text-xs text-blue-gray">
-                      <Paperclip className="size-4" aria-hidden /> Nenhum
-                      documento anexado.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <AdminEditaisPanel notices={notices} />
         </TabsContent>
 
         <TabsContent value="partners" className="pt-7">
@@ -804,40 +582,60 @@ function AdminDashboard({
             <CardHeader>
               <CardTitle>Novo parceiro</CardTitle>
               <p className="text-sm text-blue-gray">
-                Use uma URL pública de imagem em PNG, WebP ou SVG.
+                Anexe a logomarca em PNG, WebP, JPEG ou SVG (até 2 MB).
               </p>
             </CardHeader>
             <CardContent>
               <form
+                encType="multipart/form-data"
                 className="grid gap-4 md:grid-cols-[1fr_1.6fr_auto] md:items-end"
                 onSubmit={async (event) => {
                   event.preventDefault();
-                  const success = await mutate(
-                    {
-                      action: "addPartner",
-                      ...formValues(event.currentTarget),
-                    },
-                    "Parceiro adicionado.",
-                  );
-                  if (success) event.currentTarget.reset();
+                  const form = event.currentTarget;
+                  setBusyAction("addPartner-new");
+                  const response = await secureFetch("/api/admin", {
+                    method: "POST",
+                    body: new FormData(form),
+                  });
+                  const result = (await response.json()) as { error?: string };
+                  if (!response.ok) {
+                    toast.error(
+                      result.error ?? "Não foi possível adicionar o parceiro.",
+                    );
+                  } else {
+                    toast.success("Parceiro adicionado.");
+                    form.reset();
+                    router.refresh();
+                  }
+                  setBusyAction("");
                 }}
               >
+                <input type="hidden" name="action" value="addPartner" />
                 <div className="space-y-2">
                   <Label htmlFor="partner-name">Nome da instituição</Label>
                   <Input id="partner-name" name="name" required />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="partner-logo">URL da logomarca</Label>
+                  <Label htmlFor="partner-logo">Arquivo da logomarca</Label>
                   <Input
                     id="partner-logo"
                     name="logo"
-                    type="url"
-                    placeholder="https://..."
+                    type="file"
+                    accept=".png,.webp,.jpg,.jpeg,.svg,image/png,image/webp,image/jpeg,image/svg+xml"
                     required
+                    className="pt-1.5"
                   />
                 </div>
-                <Button type="submit">
-                  <Plus aria-hidden /> Adicionar
+                <Button
+                  type="submit"
+                  disabled={busyAction === "addPartner-new"}
+                >
+                  {busyAction === "addPartner-new" ? (
+                    <LoaderCircle className="animate-spin" aria-hidden />
+                  ) : (
+                    <Plus aria-hidden />
+                  )}
+                  Adicionar
                 </Button>
               </form>
             </CardContent>

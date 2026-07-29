@@ -152,6 +152,85 @@ body {
   background-attachment: fixed;
 }
 
+/* Fora da impressão fica off-screen com o tamanho real da etiqueta,
+   para medir o nome em uma linha antes do window.print(). */
+.totem-print-label {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  z-index: -1;
+  display: flex;
+  width: 57mm;
+  height: 30mm;
+  box-sizing: border-box;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2.5mm 3mm;
+  overflow: hidden;
+  color: #000;
+  background: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  text-align: center;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.totem-print-event {
+  margin: 0 0 1.5mm;
+  font-size: 7pt;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.totem-print-name {
+  display: block;
+  margin: 0;
+  width: 100%;
+  overflow: hidden;
+  font-size: 15pt;
+  line-height: 1;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+@media print {
+  @page {
+    size: 57mm 30mm;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 57mm;
+    height: 30mm;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .totem-print-label,
+  .totem-print-label * {
+    visibility: visible !important;
+  }
+
+  .totem-print-label {
+    position: fixed;
+    inset: 0;
+    left: 0;
+    z-index: auto;
+    pointer-events: auto;
+  }
+}
+
 ::selection {
   color: var(--color-purple-deep);
   background: var(--color-cyan-electric);

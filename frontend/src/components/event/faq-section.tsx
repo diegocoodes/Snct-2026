@@ -12,15 +12,15 @@ const faqs = [
   ],
   [
     "Preciso fazer inscrição?",
-    "Sim. A inscrição gera sua credencial digital e permite acompanhar as atividades escolhidas.",
+    "Sim. A inscrição gera seu QR Code individual e permite acompanhar as atividades escolhidas.",
   ],
   [
     "Como recebo meu QR Code?",
-    "Após a confirmação, o QR Code seguro ficará disponível na credencial digital e será enviado pelos canais cadastrados.",
+    "Após a confirmação, seu QR Code seguro ficará disponível e será enviado pelos canais cadastrados.",
   ],
   [
     "Como funciona o check-in?",
-    "A equipe validará o QR Code da credencial na entrada. Também haverá busca manual para suporte.",
+    "Apresente seu QR Code no Totem. Após a leitura, ele identificará seu cadastro e imprimirá uma etiqueta com seu nome.",
   ],
   [
     "O local possui acessibilidade?",
