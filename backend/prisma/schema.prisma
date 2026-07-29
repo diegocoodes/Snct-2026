@@ -166,7 +166,7 @@ model Stand {
 
 model ProfessorEscola {
   id                 BigInt   @id @default(autoincrement())
-  professorUsuarioId BigInt   @unique(map: "professor_escolas_professor_unique") @map("professor_usuario_id")
+  professorUsuarioId BigInt   @map("professor_usuario_id")
   nome               String   @db.VarChar(180)
   cidade             String?  @db.VarChar(120)
   createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
@@ -175,6 +175,7 @@ model ProfessorEscola {
   professor Usuario   @relation(fields: [professorUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_escolas_professor_fk")
   projetos  Projeto[]
 
+  @@index([professorUsuarioId], map: "professor_escolas_professor_idx")
   @@map("professor_escolas")
 }
 

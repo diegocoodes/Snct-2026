@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth";
+import { query } from "@/lib/db";
 import {
   createAluno,
   createTema,
@@ -48,7 +49,10 @@ export async function GET(request: Request) {
       });
     }
 
-    const panel = await getProfessorPanel(session.userId);
+    const panel = await getProfessorPanel(
+      session.userId,
+      url.searchParams.get("escolaId"),
+    );
     return Response.json(panel);
   } catch (error) {
     return securityErrorResponse(error);
@@ -118,7 +122,15 @@ export async function POST(request: Request) {
         return Response.json({ error: result.error }, { status: result.status });
       }
 
-      const panel = await getProfessorPanel(session.userId);
+      const temaEscola = await query<{ escola_id: number }>(
+        `SELECT escola_id FROM professor_temas WHERE id = $1 LIMIT 1`,
+        [temaId],
+      ).catch(() => ({ rows: [] as { escola_id: number }[] }));
+
+      const panel = await getProfessorPanel(
+        session.userId,
+        temaEscola.rows[0] ? String(temaEscola.rows[0].escola_id) : null,
+      );
       return Response.json({ ok: true, aluno: result.aluno, ...panel });
     }
 
@@ -129,23 +141,34 @@ export async function POST(request: Request) {
     const action = typeof body?.action === "string" ? body.action : "";
 
     if (action === "saveEscola") {
+      const escolaId =
+        typeof body?.escolaId === "string" ? body.escolaId : undefined;
       const result = await upsertEscola(session.userId, {
         nome: typeof body?.nome === "string" ? body.nome : "",
         cidade: "Paulista",
+        escolaId,
       });
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status });
       }
-      const panel = await getProfessorPanel(session.userId);
+      const panel = await getProfessorPanel(session.userId, result.escola.id);
       return Response.json({ ok: true, ...panel });
     }
 
     if (action === "createTema") {
-      const panelBefore = await getProfessorPanel(session.userId);
+      const escolaId =
+        typeof body?.escolaId === "string" ? body.escolaId : "";
+      const panelBefore = await getProfessorPanel(session.userId, escolaId || null);
       if (!panelBefore.escola) {
         return Response.json(
           { error: "Cadastre a escola antes de criar projetos." },
           { status: 400 },
+        );
+      }
+      if (escolaId && panelBefore.escola.id !== escolaId) {
+        return Response.json(
+          { error: "Escola inválida para este professor." },
+          { status: 404 },
         );
       }
       const result = await createTema(panelBefore.escola.id, {
@@ -157,7 +180,10 @@ export async function POST(request: Request) {
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status });
       }
-      const panel = await getProfessorPanel(session.userId);
+      const panel = await getProfessorPanel(
+        session.userId,
+        panelBefore.escola.id,
+      );
       return Response.json({ ok: true, tema: result.tema, ...panel });
     }
 
@@ -221,7 +247,9 @@ export async function DELETE(request: Request) {
     }
 
     if (action === "deleteEscola") {
-      const result = await deleteEscola(session.userId);
+      const escolaId =
+        typeof body?.escolaId === "string" ? body.escolaId : undefined;
+      const result = await deleteEscola(session.userId, escolaId);
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status });
       }

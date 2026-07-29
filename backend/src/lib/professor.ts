@@ -5,7 +5,7 @@ import { fileTypeFromBuffer } from "file-type";
 
 import { assertFileIsClean } from "@/lib/clamav";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
-import { query, transaction, clientExecute } from "@/lib/db";
+import { query, transaction, clientExecute, execute } from "@/lib/db";
 import { decryptFile, encryptFile } from "@/lib/encryption";
 import { hashPassword } from "@/lib/password";
 import { getRoleByCodigo } from "@/lib/roles";
@@ -21,6 +21,8 @@ export type ProfessorEscola = {
   nome: string;
   cidade: string | null;
   createdAt: string;
+  projetosCount: number;
+  locked: boolean;
 };
 
 export type ProjetoStatus = "PENDENTE" | "APROVADO" | "REJEITADO";
@@ -169,34 +171,66 @@ async function saveAutorizacaoDocumento(
   } satisfies ProfessorAlunoDocumento;
 }
 
-export async function getEscolaByProfessor(professorId: string) {
+export async function listEscolasByProfessor(professorId: string) {
   const result = await query<{
     id: number;
     professor_usuario_id: number;
     nome: string;
     cidade: string | null;
     created_at: Date;
+    projetos_count: number | string;
+    is_locked: number | string | boolean;
   }>(
-    `SELECT id, professor_usuario_id, nome, cidade, created_at
-     FROM professor_escolas
-     WHERE professor_usuario_id = $1
-     LIMIT 1`,
+    `SELECT e.id, e.professor_usuario_id, e.nome, e.cidade, e.created_at,
+            (
+              SELECT COUNT(*)
+              FROM professor_temas t
+              WHERE t.escola_id = e.id
+            ) AS projetos_count,
+            EXISTS (
+              SELECT 1
+              FROM professor_temas t
+              WHERE t.escola_id = e.id
+                AND t.status = 'APROVADO'
+                AND t.estande_id IS NOT NULL
+            ) AS is_locked
+     FROM professor_escolas e
+     WHERE e.professor_usuario_id = $1
+     ORDER BY e.created_at DESC`,
     [professorId],
   );
-  const row = result.rows[0];
-  if (!row) return null;
-  return {
-    id: toId(row.id),
-    professorUsuarioId: toId(row.professor_usuario_id),
-    nome: row.nome,
-    cidade: row.cidade,
-    createdAt: new Date(row.created_at).toISOString(),
-  } satisfies ProfessorEscola;
+
+  return result.rows.map(
+    (row) =>
+      ({
+        id: toId(row.id),
+        professorUsuarioId: toId(row.professor_usuario_id),
+        nome: row.nome,
+        cidade: row.cidade,
+        createdAt: new Date(row.created_at).toISOString(),
+        projetosCount: Number(row.projetos_count ?? 0),
+        locked:
+          row.is_locked === true ||
+          row.is_locked === 1 ||
+          row.is_locked === "1",
+      }) satisfies ProfessorEscola,
+  );
+}
+
+export async function getEscolaById(escolaId: string, professorId: string) {
+  const escolas = await listEscolasByProfessor(professorId);
+  return escolas.find((item) => item.id === escolaId) ?? null;
+}
+
+/** @deprecated use listEscolasByProfessor */
+export async function getEscolaByProfessor(professorId: string) {
+  const escolas = await listEscolasByProfessor(professorId);
+  return escolas[0] ?? null;
 }
 
 const ESCOLA_CIDADE = "Paulista";
 
-export async function upsertEscola(
+export async function createEscola(
   professorId: string,
   input: { nome: string; cidade?: string },
 ) {
@@ -216,36 +250,91 @@ export async function upsertEscola(
     };
   }
 
-  const existing = await getEscolaByProfessor(professorId);
-  if (existing) {
-    await query(
-      `UPDATE professor_escolas
-       SET nome = $1, cidade = $2
-       WHERE id = $3`,
-      [nome, cidade, existing.id],
-    );
-    return {
-      ok: true as const,
-      escola: { ...existing, nome, cidade },
-    };
-  }
-
-  await query(
+  const inserted = await execute(
     `INSERT INTO professor_escolas (professor_usuario_id, nome, cidade)
      VALUES ($1, $2, $3)`,
     [professorId, nome, cidade],
   );
-  const escola = await getEscolaByProfessor(professorId);
+  const id = toId(inserted.insertId);
+  const escola = await getEscolaById(id, professorId);
+
   if (!escola) {
     return { ok: false as const, status: 500, error: "Falha ao salvar a escola." };
   }
   return { ok: true as const, escola };
 }
 
-export async function deleteEscola(professorId: string) {
-  const escola = await getEscolaByProfessor(professorId);
+export async function updateEscola(
+  escolaId: string,
+  professorId: string,
+  input: { nome: string; cidade?: string },
+) {
+  const existing = await getEscolaById(escolaId, professorId);
+  if (!existing) {
+    return { ok: false as const, status: 404, error: "Escola não encontrada." };
+  }
+  if (existing.locked) {
+    return {
+      ok: false as const,
+      status: 400,
+      error:
+        "Esta escola já possui projeto aprovado e vinculado a um stand. Não é possível editar.",
+    };
+  }
+
+  const nome = input.nome.trim();
+  const cidade = ESCOLA_CIDADE;
+  if (nome.length < 2) {
+    return { ok: false as const, status: 400, error: "Informe o nome da escola." };
+  }
+  if (
+    input.cidade &&
+    input.cidade.trim().toLowerCase() !== ESCOLA_CIDADE.toLowerCase()
+  ) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "A cidade da escola deve ser Paulista.",
+    };
+  }
+
+  await query(
+    `UPDATE professor_escolas
+     SET nome = $1, cidade = $2
+     WHERE id = $3 AND professor_usuario_id = $4`,
+    [nome, cidade, escolaId, professorId],
+  );
+  const escola = await getEscolaById(escolaId, professorId);
+  if (!escola) {
+    return { ok: false as const, status: 500, error: "Falha ao salvar a escola." };
+  }
+  return { ok: true as const, escola };
+}
+
+export async function upsertEscola(
+  professorId: string,
+  input: { nome: string; cidade?: string; escolaId?: string },
+) {
+  if (input.escolaId) {
+    return updateEscola(input.escolaId, professorId, input);
+  }
+  return createEscola(professorId, input);
+}
+
+export async function deleteEscola(professorId: string, escolaId?: string) {
+  const escola = escolaId
+    ? await getEscolaById(escolaId, professorId)
+    : await getEscolaByProfessor(professorId);
   if (!escola) {
     return { ok: false as const, status: 404, error: "Escola não encontrada." };
+  }
+  if (escola.locked) {
+    return {
+      ok: false as const,
+      status: 400,
+      error:
+        "Esta escola já possui projeto aprovado e vinculado a um stand. Não é possível excluir.",
+    };
   }
 
   const alunos = await query<{ usuario_id: number }>(
@@ -261,7 +350,10 @@ export async function deleteEscola(professorId: string) {
     [escola.id],
   );
 
-  await query(`DELETE FROM professor_escolas WHERE id = $1`, [escola.id]);
+  await query(
+    `DELETE FROM professor_escolas WHERE id = $1 AND professor_usuario_id = $2`,
+    [escola.id, professorId],
+  );
   for (const item of estandes.rows) {
     await query(
       `UPDATE estandes SET status = 'DISPONIVEL', nome = NULL WHERE id = $1`,
@@ -335,6 +427,24 @@ export async function createTema(
   escolaId: string,
   input: { titulo: string; area?: string; descricao?: string },
 ) {
+  const locked = await query<{ ok: number }>(
+    `SELECT 1 AS ok
+     FROM professor_temas
+     WHERE escola_id = $1
+       AND status = 'APROVADO'
+       AND estande_id IS NOT NULL
+     LIMIT 1`,
+    [escolaId],
+  );
+  if (locked.rows[0]) {
+    return {
+      ok: false as const,
+      status: 400,
+      error:
+        "Esta escola já possui projeto aprovado e vinculado a um stand. Não é possível cadastrar outro projeto.",
+    };
+  }
+
   const titulo = input.titulo.trim();
   const area = input.area?.trim() || null;
   const descricao = input.descricao?.trim() || null;
@@ -362,6 +472,20 @@ export async function updateTema(
   const owned = await assertTemaOwnedByProfessor(temaId, professorId);
   if (!owned) {
     return { ok: false as const, status: 404, error: "Projeto não encontrado." };
+  }
+
+  const current = await query<{ status: string; estande_id: number | null }>(
+    `SELECT status, estande_id FROM professor_temas WHERE id = $1 LIMIT 1`,
+    [temaId],
+  );
+  const row = current.rows[0];
+  if (row?.status === "APROVADO" && row.estande_id != null) {
+    return {
+      ok: false as const,
+      status: 400,
+      error:
+        "Projeto já aprovado e vinculado a um stand. Não é possível editar.",
+    };
   }
 
   const titulo = input.titulo.trim();
@@ -394,6 +518,20 @@ export async function deleteTema(temaId: string, professorId: string) {
   );
   if (!owned.rows[0]) {
     return { ok: false as const, status: 404, error: "Projeto não encontrado." };
+  }
+  if (owned.rows[0].estande_id != null) {
+    const statusRow = await query<{ status: string }>(
+      `SELECT status FROM professor_temas WHERE id = $1 LIMIT 1`,
+      [temaId],
+    );
+    if (statusRow.rows[0]?.status === "APROVADO") {
+      return {
+        ok: false as const,
+        status: 400,
+        error:
+          "Projeto já aprovado e vinculado a um stand. Não é possível excluir.",
+      };
+    }
   }
 
   const alunos = await query<{ usuario_id: number }>(
@@ -728,19 +866,29 @@ export async function getAlunoDocumentoForProfessor(
   };
 }
 
-export async function getProfessorPanel(professorId: string) {
-  const escola = await getEscolaByProfessor(professorId);
-  if (!escola) {
+export async function getProfessorPanel(
+  professorId: string,
+  activeEscolaId?: string | null,
+) {
+  const escolas = await listEscolasByProfessor(professorId);
+  if (escolas.length === 0) {
     return {
-      escola: null,
+      escolas,
+      escola: null as ProfessorEscola | null,
       temas: [] as ProfessorTema[],
       alunosByTema: {} as Record<string, ProfessorAluno[]>,
     };
   }
+
+  const escola =
+    (activeEscolaId
+      ? escolas.find((item) => item.id === activeEscolaId)
+      : null) ?? escolas[0];
+
   const temas = await listTemas(escola.id);
   const alunosByTema: Record<string, ProfessorAluno[]> = {};
   for (const tema of temas) {
     alunosByTema[tema.id] = await listAlunos(tema.id);
   }
-  return { escola, temas, alunosByTema };
+  return { escolas, escola, temas, alunosByTema };
 }

@@ -39,6 +39,8 @@ type ProfessorEscola = {
   id: string;
   nome: string;
   cidade: string | null;
+  projetosCount?: number;
+  locked?: boolean;
 };
 
 type ProfessorTema = {
@@ -79,10 +81,47 @@ type ProfessorAluno = {
 };
 
 type PanelState = {
+  escolas?: ProfessorEscola[];
   escola: ProfessorEscola | null;
   temas: ProfessorTema[];
   alunosByTema: Record<string, ProfessorAluno[]>;
 };
+
+function isProjetoLocked(tema: ProfessorTema) {
+  return tema.status === "APROVADO" && Boolean(tema.estande);
+}
+
+function escolasFromPanel(panel: PanelState) {
+  const list = panel.escolas?.length
+    ? panel.escolas
+    : panel.escola
+      ? [panel.escola]
+      : [];
+  return list.map((escola) => {
+    const temasDaEscola =
+      panel.escola?.id === escola.id ? panel.temas : [];
+    const lockedByTemas = temasDaEscola.some(isProjetoLocked);
+    return {
+      ...escola,
+      locked: Boolean(escola.locked) || lockedByTemas,
+      projetosCount:
+        typeof escola.projetosCount === "number"
+          ? Math.max(escola.projetosCount, temasDaEscola.length)
+          : temasDaEscola.length || undefined,
+    };
+  });
+}
+
+function normalizePanel(data: PanelState): PanelState {
+  const escolas = escolasFromPanel(data);
+  const escola =
+    (data.escola
+      ? escolas.find((item) => item.id === data.escola?.id)
+      : null) ??
+    escolas[0] ??
+    null;
+  return { ...data, escolas, escola };
+}
 
 function formatCpf(raw: string) {
   const cpf = onlyDigits(raw);
@@ -128,6 +167,7 @@ function AlunoQrThumb({ hash, name }: { hash: string; name: string }) {
 
 function ProfessorPanel() {
   const [panel, setPanel] = useState<PanelState>({
+    escolas: [],
     escola: null,
     temas: [],
     alunosByTema: {},
@@ -136,6 +176,7 @@ function ProfessorPanel() {
   const [loading, setLoading] = useState(true);
   const [escolaNome, setEscolaNome] = useState("");
   const [editingEscola, setEditingEscola] = useState(false);
+  const [editingEscolaId, setEditingEscolaId] = useState<string | null>(null);
   const [addingTema, setAddingTema] = useState(false);
   const [editingTemaId, setEditingTemaId] = useState<string | null>(null);
   const [temaTitulo, setTemaTitulo] = useState("");
@@ -178,9 +219,12 @@ function ProfessorPanel() {
           | PanelState
           | null;
         if (!active || !response.ok || !data) return;
-        setPanel(data);
-        setEscolaNome(data.escola?.nome ?? "");
-        setEditingEscola(!data.escola);
+        const normalized = normalizePanel(data);
+        setPanel(normalized);
+        const escolas = escolasFromPanel(normalized);
+        setEscolaNome("");
+        setEditingEscola(escolas.length === 0);
+        setEditingEscolaId(null);
         setStep("escola");
         setSelectedTemaId(null);
       } finally {
@@ -192,6 +236,7 @@ function ProfessorPanel() {
     };
   }, []);
 
+  const escolas = escolasFromPanel(panel);
   const selectedTema =
     panel.temas.find((tema) => tema.id === selectedTemaId) ?? null;
   const alunos = selectedTema
@@ -199,22 +244,50 @@ function ProfessorPanel() {
     : [];
 
   function applyPanel(data: PanelState) {
-    setPanel(data);
-    if (data.escola) {
-      setEscolaNome(data.escola.nome);
+    const normalized = normalizePanel(data);
+    setPanel(normalized);
+    const nextEscolas = escolasFromPanel(normalized);
+    if (editingEscolaId && nextEscolas.some((item) => item.id === editingEscolaId)) {
+      const current = nextEscolas.find((item) => item.id === editingEscolaId);
+      setEscolaNome(current?.nome ?? "");
       setEditingEscola(false);
-    } else {
+      setEditingEscolaId(null);
+    } else if (!editingEscola) {
       setEscolaNome("");
-      setEditingEscola(true);
-      setStep("escola");
-      setSelectedTemaId(null);
+      setEditingEscola(nextEscolas.length === 0);
+      setEditingEscolaId(null);
     }
     if (
       selectedTemaId &&
-      !data.temas.some((tema) => tema.id === selectedTemaId)
+      !normalized.temas.some((tema) => tema.id === selectedTemaId)
     ) {
       setSelectedTemaId(null);
-      setStep(data.escola ? "temas" : "escola");
+      setStep(normalized.escola || nextEscolas.length ? "temas" : "escola");
+    }
+  }
+
+  async function loadEscolaPanel(escolaId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await secureFetch(
+        `/api/professor?escolaId=${encodeURIComponent(escolaId)}`,
+        { method: "GET", cache: "no-store" },
+      );
+      const data = (await response.json().catch(() => null)) as
+        | (PanelState & { error?: string })
+        | null;
+      if (!response.ok || !data) {
+        setError(data?.error ?? "Não foi possível abrir a escola.");
+        return false;
+      }
+      applyPanel(data);
+      return true;
+    } catch {
+      setError("Falha de rede. Tente novamente.");
+      return false;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -254,13 +327,23 @@ function ProfessorPanel() {
     event.preventDefault();
     const ok = await mutateJson(
       "POST",
-      { action: "saveEscola", nome: escolaNome, cidade: "Paulista" },
-      "Escola salva.",
+      {
+        action: "saveEscola",
+        nome: escolaNome,
+        cidade: "Paulista",
+        ...(editingEscolaId ? { escolaId: editingEscolaId } : {}),
+      },
+      editingEscolaId ? "Escola atualizada." : "Escola cadastrada.",
     );
-    if (ok) setStep("temas");
+    if (ok) {
+      setEditingEscola(false);
+      setEditingEscolaId(null);
+      setEscolaNome("");
+      setStep("temas");
+    }
   }
 
-  async function onDeleteEscola() {
+  async function onDeleteEscola(escolaId: string) {
     if (
       !window.confirm(
         "Excluir a escola remove todos os projetos e alunos. Continuar?",
@@ -270,21 +353,35 @@ function ProfessorPanel() {
     }
     const ok = await mutateJson(
       "DELETE",
-      { action: "deleteEscola" },
+      { action: "deleteEscola", escolaId },
       "Escola excluída.",
     );
     if (ok) {
       setStep("escola");
       setSelectedTemaId(null);
+      setEditingEscola(false);
+      setEditingEscolaId(null);
     }
   }
 
   async function onCreateTema(event: FormEvent) {
     event.preventDefault();
+    if (!panel.escola) {
+      setError("Selecione ou cadastre uma escola antes de criar projetos.");
+      return;
+    }
+    if (panel.escola.locked) {
+      setError(
+        "Esta escola já possui projeto aprovado e vinculado a um stand. Não é possível cadastrar outro projeto.",
+      );
+      setAddingTema(false);
+      return;
+    }
     const ok = await mutateJson(
       "POST",
       {
         action: "createTema",
+        escolaId: panel.escola.id,
         titulo: temaTitulo,
         area: temaArea,
         descricao: temaDescricao,
@@ -440,41 +537,56 @@ function ProfessorPanel() {
     }
   }
 
+  async function goBackToEscolas() {
+    setSelectedTemaId(null);
+    setAddingTema(false);
+    setEditingTemaId(null);
+    setBusy(true);
+    setError("");
+    try {
+      const response = await secureFetch("/api/professor", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = (await response.json().catch(() => null)) as
+        | (PanelState & { error?: string })
+        | null;
+      if (response.ok && data) {
+        applyPanel(data);
+      }
+      setStep("escola");
+    } catch {
+      setStep("escola");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function goCadastrarEscola() {
     setStep("escola");
     setSelectedTemaId(null);
     setEditingEscola(true);
+    setEditingEscolaId(null);
+    setEscolaNome("");
     setError("");
-    setMessage(
-      panel.escola
-        ? "Edite os dados da escola e salve."
-        : "Preencha os dados para cadastrar a escola.",
-    );
-  }
-
-  function goCadastrarProjetos() {
-    if (!panel.escola) {
-      setStep("escola");
-      setEditingEscola(true);
-      setError("Cadastre a escola antes de criar projetos.");
-      return;
-    }
-    setSelectedTemaId(null);
-    setEditingTemaId(null);
-    setTemaTitulo("");
-    setTemaArea("");
-    setTemaDescricao("");
-    setAddingTema(true);
-    setStep("temas");
-    setError("");
-    setMessage("Preencha título e área/tema para cadastrar o projeto.");
+    setMessage("Preencha os dados para cadastrar uma nova escola.");
   }
 
   function goCadastrarAluno() {
-    if (!panel.escola) {
+    if (escolas.length === 0) {
       setStep("escola");
       setEditingEscola(true);
+      setEditingEscolaId(null);
       setError("Cadastre a escola antes de cadastrar alunos.");
+      return;
+    }
+    if (step === "escola") {
+      setError("Clique na escola para abrir os projetos e cadastrar o aluno.");
+      return;
+    }
+    if (!panel.escola) {
+      setStep("escola");
+      setError("Abra uma escola para cadastrar alunos no projeto.");
       return;
     }
     if (panel.temas.length === 0) {
@@ -506,7 +618,7 @@ function ProfessorPanel() {
 
   const title =
     step === "escola"
-      ? "Sua escola"
+      ? "Suas escolas"
       : step === "temas"
         ? "Projetos"
         : step === "inscritos"
@@ -524,9 +636,11 @@ function ProfessorPanel() {
         </h1>
         <p className="mt-3 leading-7 text-blue-gray">
           {step === "escola"
-            ? "Edite ou exclua a escola, ou clique nela para ver os projetos."
+            ? "Cadastre mais de uma escola e clique nela para ver os projetos."
             : step === "temas"
-              ? "Edite ou exclua projetos, ou abra um projeto para cadastrar alunos."
+              ? panel.escola?.locked
+                ? "Esta escola já tem projeto aprovado com stand. Só é possível cadastrar alunos."
+                : "Edite ou exclua projetos pendentes, ou abra um projeto para cadastrar alunos."
               : step === "inscritos"
                 ? "Alunos já inscritos neste projeto."
                 : "Preencha os dados para inscrever um aluno neste projeto."}
@@ -542,8 +656,7 @@ function ProfessorPanel() {
             type="button"
             className="hover:text-cyan-electric"
             onClick={() => {
-              setStep("escola");
-              setSelectedTemaId(null);
+              void goBackToEscolas();
             }}
           >
             {panel.escola.nome}
@@ -593,76 +706,27 @@ function ProfessorPanel() {
               <School className="size-4" aria-hidden />
               Cadastrar escola
             </Button>
-            <Button type="button" variant="outline" onClick={goCadastrarProjetos}>
-              <Plus className="size-4" aria-hidden />
-              Cadastrar projetos
-            </Button>
             <Button type="button" variant="outline" onClick={goCadastrarAluno}>
               <Users className="size-4" aria-hidden />
               Cadastrar aluno ao projeto
             </Button>
           </div>
 
-          {panel.escola && !editingEscola ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={() => setStep("temas")}
-                className="group flex min-w-0 flex-1 items-center gap-4 text-left"
-              >
-                <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-cyan-electric/10 text-cyan-electric">
-                  <School className="size-6" aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-display text-xl font-semibold text-ice-white">
-                    {panel.escola.nome}
-                  </span>
-                  <span className="mt-1 block text-sm text-blue-gray">
-                    Paulista · {panel.temas.length} projeto
-                    {panel.temas.length === 1 ? "" : "s"}
-                  </span>
-                </span>
-                <ChevronRight
-                  className="hidden size-5 shrink-0 text-blue-gray transition group-hover:text-cyan-electric sm:block"
-                  aria-hidden
-                />
-              </button>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Editar escola"
-                  onClick={() => setEditingEscola(true)}
-                >
-                  <Pencil className="size-4" aria-hidden />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={busy}
-                  aria-label="Excluir escola"
-                  onClick={() => void onDeleteEscola()}
-                >
-                  <Trash2 className="size-4 text-red-300" aria-hidden />
-                </Button>
-              </div>
-            </div>
-          ) : (
+          {editingEscola ? (
             <form onSubmit={onSaveEscola} className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs tracking-[0.18em] text-blue-gray uppercase">
-                  {panel.escola ? "Editar escola" : "Cadastre sua escola"}
+                  {editingEscolaId ? "Editar escola" : "Nova escola"}
                 </p>
-                {panel.escola ? (
+                {escolas.length > 0 ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => {
                       setEditingEscola(false);
-                      setEscolaNome(panel.escola?.nome ?? "");
+                      setEditingEscolaId(null);
+                      setEscolaNome("");
                     }}
                   >
                     <X className="size-4" aria-hidden />
@@ -689,10 +753,87 @@ function ProfessorPanel() {
                 </div>
                 <Button type="submit" disabled={busy} className="shrink-0">
                   <Check className="size-4" aria-hidden />
-                  {panel.escola ? "Salvar" : "Continuar"}
+                  {editingEscolaId ? "Salvar" : "Continuar"}
                 </Button>
               </div>
             </form>
+          ) : null}
+
+          {escolas.length === 0 && !editingEscola ? (
+            <p className="text-sm text-blue-gray">
+              Nenhuma escola cadastrada ainda.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {escolas.map((escola) => {
+                const locked = Boolean(escola.locked);
+                const projetos =
+                  escola.projetosCount ??
+                  (panel.escola?.id === escola.id ? panel.temas.length : 0);
+                return (
+                  <li
+                    key={escola.id}
+                    className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+                  >
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        void loadEscolaPanel(escola.id).then((ok) => {
+                          if (ok) {
+                            setStep("temas");
+                            setSelectedTemaId(null);
+                            setMessage("");
+                          }
+                        });
+                      }}
+                      className="group flex min-w-0 flex-1 items-center gap-4 text-left"
+                    >
+                      <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-cyan-electric/10 text-cyan-electric">
+                        <School className="size-6" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-display text-xl font-semibold text-ice-white">
+                          {escola.nome}
+                        </span>
+                        <span className="mt-1 block text-sm text-blue-gray">
+                          Paulista · {projetos} projeto
+                          {projetos === 1 ? "" : "s"}
+                          {locked ? " · vinculado a stand" : ""}
+                        </span>
+                      </span>
+                    </button>
+                    {!locked ? (
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Editar ${escola.nome}`}
+                          onClick={() => {
+                            setEditingEscola(true);
+                            setEditingEscolaId(escola.id);
+                            setEscolaNome(escola.nome);
+                          }}
+                        >
+                          <Pencil className="size-4" aria-hidden />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={busy}
+                          aria-label={`Excluir ${escola.nome}`}
+                          onClick={() => void onDeleteEscola(escola.id)}
+                        >
+                          <Trash2 className="size-4 text-red-300" aria-hidden />
+                        </Button>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
       ) : null}
@@ -705,12 +846,14 @@ function ProfessorPanel() {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setStep("escola")}
+              onClick={() => {
+                void goBackToEscolas();
+              }}
             >
               <ArrowLeft className="size-4" aria-hidden />
               Voltar
             </Button>
-            {!addingTema && !editingTemaId ? (
+            {!addingTema && !editingTemaId && !panel.escola.locked ? (
               <Button
                 type="button"
                 variant="glow"
@@ -836,25 +979,29 @@ function ProfessorPanel() {
                       )}
                     </button>
                     <div className="flex shrink-0 flex-wrap gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Editar ${tema.titulo}`}
-                        onClick={() => startEditTema(tema)}
-                      >
-                        <Pencil className="size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={busy}
-                        aria-label={`Excluir ${tema.titulo}`}
-                        onClick={() => void onDeleteTema(tema.id)}
-                      >
-                        <Trash2 className="size-4 text-red-300" aria-hidden />
-                      </Button>
+                      {!isProjetoLocked(tema) ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Editar ${tema.titulo}`}
+                            onClick={() => startEditTema(tema)}
+                          >
+                            <Pencil className="size-4" aria-hidden />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={busy}
+                            aria-label={`Excluir ${tema.titulo}`}
+                            onClick={() => void onDeleteTema(tema.id)}
+                          >
+                            <Trash2 className="size-4 text-red-300" aria-hidden />
+                          </Button>
+                        </>
+                      ) : null}
                       <Button
                         type="button"
                         variant="glow"
