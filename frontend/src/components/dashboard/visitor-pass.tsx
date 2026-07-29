@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PublicUser } from "@/lib/snct-types";
+import { ROLE_LABELS } from "@/lib/roles-constants";
 import { buildCredentialQrPayload } from "@/lib/qr-payload";
 
 function VisitorPass({
@@ -40,21 +41,14 @@ function VisitorPass({
   }, [hash]);
 
   const roleTitle =
-    visitor.roleNome ??
-    ({
-      admin: "Administrador",
-      staff: "Staff",
-      avaliador: "Avaliador",
-      professor: "Professor",
-      visitante: "Visitante",
-      aluno: "Aluno",
-    }[visitor.role] ?? "Participante");
+    visitor.roleNome ?? ROLE_LABELS[visitor.role] ?? "Participante";
 
   const isVisitante = visitor.role === "visitante";
   const isAluno = visitor.role === "aluno";
   const isCpfAccess =
     isVisitante ||
     isAluno ||
+    visitor.role === "participante" ||
     visitor.role === "professor" ||
     visitor.role === "avaliador";
 

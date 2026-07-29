@@ -16,7 +16,8 @@ INSERT INTO roles (codigo, nome) VALUES
   ('AVALIADOR', 'Avaliador'),
   ('PROFESSOR', 'Professor'),
   ('VISITANTE', 'Visitante'),
-  ('ALUNO', 'Aluno');
+  ('ALUNO', 'Aluno'),
+  ('PARTICIPANTE', 'Participante');
 
 CREATE TABLE usuarios (
   id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,

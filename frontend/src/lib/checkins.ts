@@ -112,7 +112,7 @@ const participantSelect = `
          u.ativo, u.qr_code_hash, r.codigo AS role_codigo, r.nome AS role_nome
   FROM usuarios u
   INNER JOIN roles r ON r.id = u.role_id
-  WHERE r.codigo IN ('STAFF', 'AVALIADOR', 'PROFESSOR', 'VISITANTE', 'ALUNO')
+  WHERE r.codigo IN ('STAFF', 'AVALIADOR', 'PROFESSOR', 'VISITANTE', 'ALUNO', 'PARTICIPANTE')
 `;
 
 export async function listParticipantesCheckin(limit = 50) {

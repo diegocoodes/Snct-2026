@@ -7,6 +7,7 @@ export const ROLE_CODIGO_TO_AUTH: Record<RoleCodigo, UserRole> = {
   PROFESSOR: "professor",
   VISITANTE: "visitante",
   ALUNO: "aluno",
+  PARTICIPANTE: "participante",
 };
 
 export const AUTH_ROLE_TO_CODIGO: Record<UserRole, RoleCodigo> = {
@@ -16,6 +17,7 @@ export const AUTH_ROLE_TO_CODIGO: Record<UserRole, RoleCodigo> = {
   professor: "PROFESSOR",
   visitante: "VISITANTE",
   aluno: "ALUNO",
+  participante: "PARTICIPANTE",
 };
 
 export const PUBLIC_REGISTRATION_ROLES = [
@@ -30,6 +32,7 @@ export const CHECKIN_ELIGIBLE_ROLES = [
   "PROFESSOR",
   "VISITANTE",
   "ALUNO",
+  "PARTICIPANTE",
 ] as const satisfies readonly RoleCodigo[];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -39,6 +42,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   professor: "Professor",
   visitante: "Visitante",
   aluno: "Aluno",
+  participante: "Participante",
 };
 
 export function requiresMfa(role: UserRole) {

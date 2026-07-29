@@ -18,6 +18,7 @@ const codigoToRole: Record<string, UserRole> = {
   PROFESSOR: "professor",
   VISITANTE: "visitante",
   ALUNO: "aluno",
+  PARTICIPANTE: "participante",
 };
 
 function ConfirmacaoInscricaoClient() {
@@ -25,6 +26,8 @@ function ConfirmacaoInscricaoClient() {
   const hash = params.get("hash") ?? "";
   const nome = params.get("nome") ?? "Participante";
   const perfil = params.get("perfil") ?? "VISITANTE";
+  const time = params.get("time") ?? "";
+  const jogo = params.get("jogo") ?? "";
   const [qrCode, setQrCode] = useState("");
 
   const roleLabel = useMemo(() => {
@@ -35,6 +38,7 @@ function ConfirmacaoInscricaoClient() {
   const isVisitante = perfil === "VISITANTE";
   const isProfessor = perfil === "PROFESSOR";
   const isAvaliador = perfil === "AVALIADOR";
+  const isParticipante = perfil === "PARTICIPANTE";
 
   useEffect(() => {
     if (!hash) return;
@@ -61,19 +65,25 @@ function ConfirmacaoInscricaoClient() {
     );
   }
 
+  const description = isVisitante
+    ? `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in. Para consultá-lo depois, use o CPF no menu Visitante.`
+    : isProfessor
+      ? `Seu perfil de ${roleLabel} foi criado. No menu Escola e alunos você cadastra a escola, os projetos e os alunos.`
+      : isAvaliador
+        ? `Seu perfil de ${roleLabel} foi criado. Em Avaliar stands você escaneia o QR do stand e preenche a ficha.`
+        : isParticipante
+          ? `Time ${time || nome}${jogo ? ` · ${jogo}` : ""} inscrito na Arena Gamer. Este é o QR Code do responsável — cada integrante criado também tem a própria credencial.`
+          : `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in diário.`;
+
   return (
     <AuthFrame
       eyebrow="Inscrição concluída"
-      title={`Bem-vindo(a), ${nome.split(" ")[0]}`}
-      description={
-        isVisitante
-          ? `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in. Para consultá-lo depois, use o CPF no menu Visitante.`
-          : isProfessor
-            ? `Seu perfil de ${roleLabel} foi criado. No menu Escola e alunos você cadastra a escola, os projetos e os alunos.`
-            : isAvaliador
-              ? `Seu perfil de ${roleLabel} foi criado. Em Avaliar stands você escaneia o QR do stand e preenche a ficha.`
-              : `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in diário.`
+      title={
+        isParticipante
+          ? `Time inscrito`
+          : `Bem-vindo(a), ${nome.split(" ")[0]}`
       }
+      description={description}
     >
       <div className="mx-auto grid max-w-sm place-items-center gap-4">
         <div className="grid aspect-square w-full place-items-center rounded-3xl bg-ice-white p-4">
@@ -99,7 +109,7 @@ function ConfirmacaoInscricaoClient() {
             <Download aria-hidden /> Baixar QR Code
           </Button>
         ) : null}
-        {isVisitante ? (
+        {isVisitante || isParticipante ? (
           <Button
             variant="outline"
             className="w-full"

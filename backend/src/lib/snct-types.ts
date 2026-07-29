@@ -4,7 +4,8 @@ export type UserRole =
   | "avaliador"
   | "professor"
   | "visitante"
-  | "aluno";
+  | "aluno"
+  | "participante";
 
 export type RoleCodigo =
   | "ADMINISTRADOR"
@@ -12,7 +13,8 @@ export type RoleCodigo =
   | "AVALIADOR"
   | "PROFESSOR"
   | "VISITANTE"
-  | "ALUNO";
+  | "ALUNO"
+  | "PARTICIPANTE";
 
 export type CheckinMetodo = "QRCODE" | "NOME" | "EMAIL" | "CPF" | "MANUAL";
 

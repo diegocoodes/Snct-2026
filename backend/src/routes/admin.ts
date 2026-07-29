@@ -324,6 +324,7 @@ export async function PATCH(request: Request) {
         professor: "PROFESSOR",
         visitante: "VISITANTE",
         aluno: "ALUNO",
+        participante: "PARTICIPANTE",
         visitor: "VISITANTE",
         ADMINISTRADOR: "ADMINISTRADOR",
         STAFF: "STAFF",
@@ -331,6 +332,7 @@ export async function PATCH(request: Request) {
         PROFESSOR: "PROFESSOR",
         VISITANTE: "VISITANTE",
         ALUNO: "ALUNO",
+        PARTICIPANTE: "PARTICIPANTE",
       };
       const roleCodigo = roleFromAuth[requestedRaw] ?? "VISITANTE";
       const telefone = onlyDigits(String(body?.telefone ?? "81999999999"));
@@ -418,6 +420,151 @@ export async function PATCH(request: Request) {
         entity: "usuario",
         entityId: userId,
         metadata: { role: roleCodigo },
+      });
+      return Response.json({ user });
+    }
+
+    if (action === "updateUser") {
+      const userId = clean(body?.userId, 100);
+      const name = clean(body?.name, 160);
+      const email = clean(body?.email, 254).toLowerCase();
+      const telefone = onlyDigits(String(body?.telefone ?? ""));
+      const cpf = onlyDigits(String(body?.cpf ?? ""));
+      const dataNascimento = clean(body?.dataNascimento, 10);
+      const password =
+        typeof body?.password === "string" ? body.password.trim() : "";
+      const requestedRaw =
+        typeof body?.roleCodigo === "string"
+          ? body.roleCodigo
+          : typeof body?.role === "string"
+            ? body.role
+            : "";
+      const roleFromAuth: Record<string, RoleCodigo> = {
+        admin: "ADMINISTRADOR",
+        staff: "STAFF",
+        avaliador: "AVALIADOR",
+        professor: "PROFESSOR",
+        visitante: "VISITANTE",
+        aluno: "ALUNO",
+        participante: "PARTICIPANTE",
+        ADMINISTRADOR: "ADMINISTRADOR",
+        STAFF: "STAFF",
+        AVALIADOR: "AVALIADOR",
+        PROFESSOR: "PROFESSOR",
+        VISITANTE: "VISITANTE",
+        ALUNO: "ALUNO",
+        PARTICIPANTE: "PARTICIPANTE",
+      };
+      const roleCodigo = roleFromAuth[requestedRaw];
+
+      if (
+        !userId ||
+        name.length < 2 ||
+        !isEmail(email) ||
+        !cpf ||
+        !isValidCpf(cpf) ||
+        !telefone ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(dataNascimento) ||
+        !roleCodigo
+      ) {
+        return Response.json(
+          {
+            error:
+              "Informe nome, e-mail, CPF, telefone, data de nascimento e perfil válidos.",
+          },
+          { status: 400 },
+        );
+      }
+      if (password && !isStrongPassword(password)) {
+        return Response.json(
+          {
+            error:
+              "A nova senha precisa ter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const existing = await query<{ id: number; role_codigo: RoleCodigo }>(
+        `SELECT u.id, r.codigo AS role_codigo
+         FROM usuarios u
+         INNER JOIN roles r ON r.id = u.role_id
+         WHERE u.id = $1 LIMIT 1`,
+        [userId],
+      );
+      const current = existing.rows[0];
+      if (!current) {
+        return Response.json({ error: "Usuário não encontrado." }, { status: 404 });
+      }
+
+      const emailTaken = await query<{ id: number }>(
+        "SELECT id FROM usuarios WHERE lower(email) = $1 AND id <> $2 LIMIT 1",
+        [email, userId],
+      );
+      if (emailTaken.rows[0]) {
+        return Response.json(
+          { error: "Este e-mail já está em uso." },
+          { status: 409 },
+        );
+      }
+      const cpfTaken = await query<{ id: number }>(
+        "SELECT id FROM usuarios WHERE cpf = $1 AND id <> $2 LIMIT 1",
+        [cpf, userId],
+      );
+      if (cpfTaken.rows[0]) {
+        return Response.json(
+          { error: "Este CPF já está em uso." },
+          { status: 409 },
+        );
+      }
+
+      if (password) {
+        const senhaHash = await hashPassword(password);
+        await query(
+          `UPDATE usuarios
+           SET nome_completo = $2, email = $3, telefone = $4,
+               cpf = $5, data_nascimento = $6, senha_hash = $7
+           WHERE id = $1`,
+          [
+            userId,
+            name,
+            email,
+            telefone,
+            cpf,
+            dataNascimento,
+            senhaHash,
+          ],
+        );
+      } else {
+        await query(
+          `UPDATE usuarios
+           SET nome_completo = $2, email = $3, telefone = $4,
+               cpf = $5, data_nascimento = $6
+           WHERE id = $1`,
+          [userId, name, email, telefone, cpf, dataNascimento],
+        );
+      }
+
+      if (current.role_codigo !== roleCodigo) {
+        await changeUserRole({
+          usuarioId: userId,
+          novaRoleCodigo: roleCodigo,
+          alteradoPorUsuarioId: session.userId,
+          motivo: "Alteração via edição de perfil no painel",
+          request,
+        });
+      }
+
+      const user = (await readSnctStore()).users.find(
+        (item) => item.id === userId,
+      );
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "user.update",
+        entity: "usuario",
+        entityId: userId,
+        metadata: { role: roleCodigo, passwordChanged: Boolean(password) },
       });
       return Response.json({ user });
     }

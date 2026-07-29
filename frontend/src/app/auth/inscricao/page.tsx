@@ -21,6 +21,12 @@ const options = [
     title: "Visitante",
     description: "Para o público geral da SNCT.",
   },
+  {
+    href: "/auth/inscricao/arena",
+    title: "Participante — Arena Gamer",
+    description:
+      "Inscreva o time completo (5 integrantes) em LoL, Valorant ou Free Fire.",
+  },
 ] as const;
 
 export default async function Page() {

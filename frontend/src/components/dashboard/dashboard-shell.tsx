@@ -4,17 +4,9 @@ import { LayoutDashboard, QrCode, School } from "lucide-react";
 
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { Badge } from "@/components/ui/badge";
+import { ROLE_LABELS } from "@/lib/roles-constants";
 import type { SessionData } from "@/lib/snct-types";
 import { cn } from "@/lib/utils";
-
-const roleLabels = {
-  admin: "Administrador",
-  staff: "Staff",
-  avaliador: "Avaliador",
-  professor: "Professor",
-  visitante: "Visitante",
-  aluno: "Aluno",
-} as const;
 
 function DashboardShell({
   session,
@@ -89,7 +81,7 @@ function DashboardShell({
               className="border-cyan-electric/25 bg-cyan-electric/10 text-cyan-electric"
             >
               <LayoutDashboard data-icon="inline-start" aria-hidden />
-              {roleLabels[session.role]}
+              {ROLE_LABELS[session.role]}
             </Badge>
             <LogoutButton />
           </div>

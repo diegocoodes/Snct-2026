@@ -8,13 +8,53 @@ function AuthFrame({
   eyebrow,
   title,
   description,
+  wide = false,
   children,
 }: {
   eyebrow: string;
   title: string;
   description: string;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
+  if (wide) {
+    return (
+      <main className="relative min-h-svh overflow-hidden bg-purple-deep px-5 py-10 sm:px-8 lg:px-12">
+        <div aria-hidden className="absolute inset-0 circuit-grid opacity-35" />
+        <div
+          aria-hidden
+          className="absolute -top-40 -left-32 size-[34rem] rounded-full bg-purple-vibrant/30 blur-[130px]"
+        />
+        <div
+          aria-hidden
+          className="absolute -right-40 bottom-0 size-[32rem] rounded-full bg-magenta-neon/20 blur-[140px]"
+        />
+
+        <div className="relative mx-auto w-full max-w-5xl">
+          <Link
+            href="/"
+            className="mb-8 inline-flex items-center gap-2 text-sm text-blue-gray transition-colors hover:text-ice-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-electric"
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+            Voltar ao portal
+          </Link>
+          <p className="font-display text-xs font-semibold tracking-[.2em] text-cyan-electric uppercase">
+            {eyebrow}
+          </p>
+          <h1 className="mt-3 font-display text-3xl font-semibold text-ice-white sm:text-4xl">
+            {title}
+          </h1>
+          <p className="mt-3 max-w-2xl leading-7 text-blue-gray">
+            {description}
+          </p>
+          <div className="surface-glass mt-8 rounded-[1.75rem] p-5 sm:p-7">
+            {children}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="relative grid min-h-svh overflow-hidden bg-purple-deep lg:grid-cols-[.92fr_1.08fr]">
       <div aria-hidden className="absolute inset-0 circuit-grid opacity-35" />

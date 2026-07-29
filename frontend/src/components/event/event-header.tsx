@@ -15,7 +15,6 @@ import {
   Menu,
   Newspaper,
   QrCode,
-  ScanLine,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -102,12 +101,6 @@ function EventHeader() {
         <div className="hidden items-center gap-2 lg:flex">
           <Button variant="outline" render={<Link href="/credencial" />}>
             <QrCode aria-hidden /> Credencial
-          </Button>
-          <Button
-            variant="glow"
-            render={<Link href="/totem" />}
-          >
-            Totem
           </Button>
           <Button variant="ghost" render={<Link href="/login" />}>
             <LogIn aria-hidden /> Entrar
@@ -207,16 +200,6 @@ function EventHeader() {
             </nav>
 
             <SheetFooter className="relative border-t border-white/10 bg-black/10 p-4">
-              <SheetClose
-                render={
-                  <Link
-                    href="/totem"
-                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-cyan-electric/30 bg-cyan-electric/10 px-4 text-sm font-semibold text-cyan-electric shadow-[0_0_24px_rgb(0_229_255/12%)] hover:bg-cyan-electric/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-electric"
-                  />
-                }
-              >
-                <ScanLine className="size-4" aria-hidden /> Totem
-              </SheetClose>
               <SheetClose
                 render={
                   <Link

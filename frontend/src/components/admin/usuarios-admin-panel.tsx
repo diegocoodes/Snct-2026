@@ -20,6 +20,7 @@ const roleOptions: RoleCodigo[] = [
   "PROFESSOR",
   "VISITANTE",
   "ALUNO",
+  "PARTICIPANTE",
 ];
 
 function UsuariosAdminPanel({

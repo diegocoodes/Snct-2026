@@ -26,11 +26,11 @@ import { toast } from "sonner";
 import { AdminEditaisPanel } from "@/components/dashboard/admin-editais-panel";
 import { AdminEstandesPanel } from "@/components/dashboard/admin-estandes-panel";
 import { AdminProjetosPanel } from "@/components/dashboard/admin-projetos-panel";
+import { AdminUsuariosPanel } from "@/components/dashboard/admin-usuarios-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { InputMask } from "@/components/ui/input-mask";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
@@ -41,7 +41,6 @@ import type {
   PublicUser,
   SiteSettings,
 } from "@/lib/snct-types";
-import { ROLE_LABELS } from "@/lib/roles-constants";
 import { secureFetch } from "@/lib/secure-fetch";
 
 type AdminDashboardProps = {
@@ -94,6 +93,7 @@ function AdminDashboard({
     (user) =>
       user.role === "visitante" ||
       user.role === "aluno" ||
+      user.role === "participante" ||
       user.role === "avaliador" ||
       user.role === "professor",
   );
@@ -252,178 +252,7 @@ function AdminDashboard({
         </TabsContent>
 
         <TabsContent value="users" className="pt-7">
-          <div className="grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
-            <Card className="h-fit border-cyan-electric/20">
-              <CardHeader>
-                <CardTitle>Criar usuário</CardTitle>
-                <p className="text-sm leading-6 text-blue-gray">
-                  Cadastre visitantes ou delegue acesso à equipe Staff.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <form
-                  className="grid gap-4"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    const values = formValues(event.currentTarget);
-                    const success = await mutate(
-                      { action: "createUser", ...values },
-                      "Usuário criado.",
-                    );
-                    if (success) event.currentTarget.reset();
-                  }}
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-name">Nome</Label>
-                    <Input id="new-user-name" name="name" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-email">E-mail</Label>
-                    <Input
-                      id="new-user-email"
-                      name="email"
-                      type="email"
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="new-user-cpf">CPF</Label>
-                      <InputMask
-                        id="new-user-cpf"
-                        name="cpf"
-                        mask="cpf"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="new-user-telefone">Telefone</Label>
-                      <InputMask
-                        id="new-user-telefone"
-                        name="telefone"
-                        mask="phone"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="new-user-role">Perfil</Label>
-                      <select
-                        id="new-user-role"
-                        name="role"
-                        defaultValue="staff"
-                        className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                      >
-                        <option value="staff">Staff</option>
-                        <option value="admin">Administrador</option>
-                        <option value="visitante">Visitante</option>
-                        <option value="aluno">Aluno</option>
-                        <option value="avaliador">Avaliador</option>
-                        <option value="professor">Professor</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="new-user-birth">Data de nascimento</Label>
-                      <Input
-                        id="new-user-birth"
-                        name="dataNascimento"
-                        type="date"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-password">Senha temporária</Label>
-                    <Input
-                      id="new-user-password"
-                      name="password"
-                      type="password"
-                      minLength={12}
-                      maxLength={128}
-                      required
-                    />
-                    <p className="text-xs text-blue-gray">
-                      Mínimo 12 caracteres, com maiúscula, minúscula, número e
-                      símbolo.
-                    </p>
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={busyAction.startsWith("createUser")}
-                  >
-                    <Plus aria-hidden /> Criar usuário
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Usuários cadastrados</CardTitle>
-                <p className="text-sm text-blue-gray">
-                  {users.length} conta(s) além do administrador principal.
-                </p>
-              </CardHeader>
-              <CardContent>
-                {users.length ? (
-                  <ul className="divide-y divide-white/10">
-                    {users.map((user) => (
-                      <li
-                        key={user.id}
-                        className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-ice-white">
-                              {user.name}
-                            </p>
-                            <Badge
-                              variant="outline"
-                              className={
-                                user.role === "staff" || user.role === "admin"
-                                  ? "border-purple-vibrant/30 bg-purple-vibrant/10 text-[#BDA5FF]"
-                                  : "border-cyan-electric/30 bg-cyan-electric/10 text-cyan-electric"
-                              }
-                            >
-                              {ROLE_LABELS[user.role] ?? user.role}
-                            </Badge>
-                            {user.checkedInAt ? (
-                              <Badge className="bg-emerald-500/15 text-emerald-300">
-                                Check-in
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <p className="mt-1 truncate text-sm text-blue-gray">
-                            {user.email}
-                            {user.age ? ` · ${user.age} anos` : ""}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={busyAction === `deleteUser-${user.id}`}
-                          onClick={() => {
-                            if (window.confirm(`Excluir ${user.name}?`))
-                              void mutate(
-                                { action: "deleteUser", userId: user.id },
-                                "Usuário excluído.",
-                              );
-                          }}
-                        >
-                          <Trash2 aria-hidden /> Excluir
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-blue-gray">
-                    Nenhum usuário cadastrado ainda.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <AdminUsuariosPanel users={users} />
         </TabsContent>
 
         <TabsContent value="events" className="pt-7">
