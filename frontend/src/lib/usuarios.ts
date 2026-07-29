@@ -9,6 +9,10 @@ import { recordAuditEvent } from "@/lib/audit";
 import { assertFileIsClean } from "@/lib/clamav";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import { query, transaction, clientQuery } from "@/lib/db";
+import {
+  normalizeCidade,
+  normalizeEstado,
+} from "@/lib/estados-brasil";
 import { hashPassword } from "@/lib/password";
 import {
   getRoleByCodigo,
@@ -27,6 +31,8 @@ export type RegistroUsuarioInput = {
   telefone: string;
   cpf: string;
   dataNascimento: string;
+  estado: string;
+  cidade: string;
   senha: string;
   aceitouDireitoImagem: boolean;
   privacyConsent?: boolean;
@@ -103,6 +109,8 @@ export async function registrarUsuario(
   const telefone = onlyDigits(dados.telefone);
   const cpf = onlyDigits(dados.cpf);
   const birth = parseBirthDate(dados.dataNascimento.trim());
+  const estado = normalizeEstado(dados.estado ?? "");
+  const cidade = normalizeCidade(dados.cidade ?? "");
   const senha = dados.senha;
 
   if (nomeCompleto.length < 2) {
@@ -123,6 +131,12 @@ export async function registrarUsuario(
       status: 400,
       error: "Informe uma data de nascimento válida.",
     };
+  }
+  if (!estado) {
+    return { ok: false, status: 400, error: "Selecione o estado." };
+  }
+  if (cidade.length < 2) {
+    return { ok: false, status: 400, error: "Informe a cidade." };
   }
   if (!dados.aceitouDireitoImagem) {
     return {
@@ -179,9 +193,9 @@ export async function registrarUsuario(
   await query(
     `INSERT INTO usuarios
       (role_id, nome_completo, email, telefone, cpf, senha_hash,
-       data_nascimento, foto, aceitou_direito_imagem, data_aceite_direito_imagem,
-       qr_code_hash, ativo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, TRUE, NOW(3), $8, TRUE)`,
+       data_nascimento, estado, cidade, foto, aceitou_direito_imagem,
+       data_aceite_direito_imagem, qr_code_hash, ativo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, TRUE, NOW(3), $10, TRUE)`,
     [
       role.id,
       nomeCompleto,
@@ -190,6 +204,8 @@ export async function registrarUsuario(
       cpf,
       senhaHash,
       birth.iso,
+      estado,
+      cidade,
       qrCodeHash,
     ],
   );
@@ -241,6 +257,8 @@ export async function registrarUsuario(
       telefone,
       cpf,
       dataNascimento: birth.iso,
+      estado,
+      cidade,
       foto: fotoPath ?? undefined,
       aceitouDireitoImagem: true,
       qrCodeHash,

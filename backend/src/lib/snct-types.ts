@@ -29,6 +29,8 @@ export type StoredUser = {
   telefone?: string;
   cpf?: string;
   dataNascimento?: string;
+  estado?: string;
+  cidade?: string;
   foto?: string;
   aceitouDireitoImagem?: boolean;
   dataAceiteDireitoImagem?: string;
@@ -88,6 +90,7 @@ export type ManagedPartner = {
   id: string;
   name: string;
   logo: string;
+  hidden?: boolean;
 };
 
 export type ManagedNoticeDocument = {

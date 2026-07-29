@@ -23,6 +23,8 @@ async function parseRegistroBody(request: Request): Promise<RegistroUsuarioInput
       telefone: String(form.get("telefone") ?? ""),
       cpf: String(form.get("cpf") ?? ""),
       dataNascimento: String(form.get("dataNascimento") ?? ""),
+      estado: String(form.get("estado") ?? ""),
+      cidade: String(form.get("cidade") ?? ""),
       senha: String(form.get("senha") ?? form.get("password") ?? ""),
       aceitouDireitoImagem:
         form.get("aceitouDireitoImagem") === "true" ||
@@ -49,6 +51,8 @@ async function parseRegistroBody(request: Request): Promise<RegistroUsuarioInput
     telefone: String(body?.telefone ?? ""),
     cpf: String(body?.cpf ?? ""),
     dataNascimento: String(body?.dataNascimento ?? ""),
+    estado: String(body?.estado ?? ""),
+    cidade: String(body?.cidade ?? ""),
     senha: String(body?.senha ?? body?.password ?? ""),
     aceitouDireitoImagem: body?.aceitouDireitoImagem === true,
     privacyConsent: body?.privacyConsent !== false,

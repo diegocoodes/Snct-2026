@@ -5,6 +5,11 @@ import { FolderKanban, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AdminEstande } from "@/components/dashboard/admin-estandes-panel";
+import {
+  AdminListPagination,
+  AdminListSearch,
+  useFilteredPagination,
+} from "@/components/dashboard/admin-list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -51,6 +56,23 @@ function statusBadgeForProjeto(status: ProjetoStatus) {
   return <StatusBadge status="warning">Pendente</StatusBadge>;
 }
 
+function filterProjeto(projeto: AdminProjeto, query: string) {
+  const haystack = [
+    projeto.titulo,
+    projeto.area,
+    projeto.escolaNome,
+    projeto.professorNome,
+    projeto.professorEmail,
+    projeto.status,
+    projeto.estande?.codigo,
+    projeto.estande?.nome,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
 function AdminProjetosPanel() {
   const [estandes, setEstandes] = useState<AdminEstande[]>([]);
   const [projetos, setProjetos] = useState<AdminProjeto[]>([]);
@@ -71,6 +93,12 @@ function AdminProjetosPanel() {
     if (filtroStatus === "TODOS") return projetos;
     return projetos.filter((item) => item.status === filtroStatus);
   }, [projetos, filtroStatus]);
+
+  const filterFn = useCallback(filterProjeto, []);
+  const list = useFilteredPagination({
+    items: projetosFiltrados,
+    filterFn,
+  });
 
   const load = useCallback(async () => {
     const response = await secureFetch("/api/admin");
@@ -187,12 +215,22 @@ function AdminProjetosPanel() {
             </select>
           </div>
         </CardHeader>
-        <CardContent>
-          {projetosFiltrados.length === 0 ? (
-            <p className="text-sm text-blue-gray">Nenhum projeto nesta lista.</p>
+        <CardContent className="space-y-4">
+          <AdminListSearch
+            query={list.query}
+            onQueryChange={list.setQuery}
+            placeholder="Buscar projeto, escola ou professor…"
+            resultLabel={`${list.filteredCount} resultado(s)`}
+          />
+          {list.pageItems.length === 0 ? (
+            <p className="text-sm text-blue-gray">
+              {projetosFiltrados.length
+                ? "Nenhum projeto encontrado para esta busca."
+                : "Nenhum projeto nesta lista."}
+            </p>
           ) : (
             <ul className="space-y-3">
-              {projetosFiltrados.map((projeto) => (
+              {list.pageItems.map((projeto) => (
                 <li
                   key={projeto.id}
                   className="rounded-2xl border border-white/10 bg-white/[0.02] p-4"
@@ -291,6 +329,11 @@ function AdminProjetosPanel() {
               ))}
             </ul>
           )}
+          <AdminListPagination
+            page={list.page}
+            totalPages={list.totalPages}
+            onPageChange={list.setPage}
+          />
         </CardContent>
       </Card>
 

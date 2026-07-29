@@ -30,6 +30,8 @@ type UsuarioRow = {
   cpf: string;
   senha_hash: string;
   data_nascimento: Date | string;
+  estado?: string;
+  cidade?: string;
   foto: string | null;
   aceitou_direito_imagem: number | boolean;
   data_aceite_direito_imagem: Date | null;
@@ -74,6 +76,8 @@ export function mapUsuarioRow(row: UsuarioRow): StoredUser {
     telefone: row.telefone,
     cpf: row.cpf,
     dataNascimento: birthIso(row.data_nascimento),
+    estado: row.estado || undefined,
+    cidade: row.cidade || undefined,
     foto: row.foto ?? undefined,
     aceitouDireitoImagem: Boolean(row.aceitou_direito_imagem),
     dataAceiteDireitoImagem: row.data_aceite_direito_imagem
@@ -91,8 +95,9 @@ export function mapUsuarioRow(row: UsuarioRow): StoredUser {
 
 const userSelect = `
   SELECT u.id, u.role_id, u.nome_completo, u.email, u.telefone, u.cpf,
-         u.senha_hash, u.data_nascimento, u.foto, u.aceitou_direito_imagem,
-         u.data_aceite_direito_imagem, u.qr_code_hash, u.ativo, u.created_at,
+         u.senha_hash, u.data_nascimento, u.estado, u.cidade, u.foto,
+         u.aceitou_direito_imagem, u.data_aceite_direito_imagem,
+         u.qr_code_hash, u.ativo, u.created_at,
          r.codigo AS role_codigo, r.nome AS role_nome
   FROM usuarios u
   INNER JOIN roles r ON r.id = u.role_id
@@ -198,9 +203,9 @@ export async function ensureBootstrapAdmin() {
   await query(
     `INSERT INTO usuarios
       (role_id, nome_completo, email, telefone, cpf, senha_hash,
-       data_nascimento, aceitou_direito_imagem, data_aceite_direito_imagem,
-       qr_code_hash, ativo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(3), $8, TRUE)`,
+       data_nascimento, estado, cidade, aceitou_direito_imagem,
+       data_aceite_direito_imagem, qr_code_hash, ativo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, NOW(3), $10, TRUE)`,
     [
       role.id,
       "Administrador SNCT",
@@ -209,6 +214,8 @@ export async function ensureBootstrapAdmin() {
       "00000000000",
       senhaHash,
       "1990-01-01",
+      "PE",
+      "Paulista",
       createVisitorHash(),
     ],
   );

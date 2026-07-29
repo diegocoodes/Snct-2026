@@ -5,6 +5,10 @@ import { readAuditEvents, recordAuditEvent } from "@/lib/audit";
 import { onlyDigits, isValidCpf } from "@/lib/cpf";
 import { query } from "@/lib/db";
 import {
+  normalizeCidade,
+  normalizeEstado,
+} from "@/lib/estados-brasil";
+import {
   createEstande,
   deleteEstande,
   listEstandes,
@@ -182,6 +186,7 @@ export async function POST(request: Request) {
         id: `partner-${randomUUID()}`,
         name,
         logo: uploadedPartnerLogo,
+        hidden: false,
       };
       await updateSnctStore((store) => store.partners.push(partner));
       await recordAuditEvent(request, {
@@ -339,10 +344,25 @@ export async function PATCH(request: Request) {
       const cpf = onlyDigits(String(body?.cpf ?? ""));
       const dataNascimento =
         clean(body?.dataNascimento, 10) || "1990-01-01";
+      const estado = normalizeEstado(String(body?.estado ?? ""));
+      const cidade = normalizeCidade(String(body?.cidade ?? ""));
 
       const roleRow = await getRoleByCodigo(roleCodigo);
       if (!roleRow) {
         return Response.json({ error: "Função inválida." }, { status: 400 });
+      }
+
+      if (!estado) {
+        return Response.json(
+          { error: "Selecione o estado." },
+          { status: 400 },
+        );
+      }
+      if (cidade.length < 2) {
+        return Response.json(
+          { error: "Informe a cidade." },
+          { status: 400 },
+        );
       }
 
       if (
@@ -386,9 +406,9 @@ export async function PATCH(request: Request) {
       await query(
         `INSERT INTO usuarios
           (role_id, nome_completo, email, telefone, cpf, senha_hash,
-           data_nascimento, aceitou_direito_imagem, data_aceite_direito_imagem,
-           qr_code_hash, ativo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(3), $8, TRUE)`,
+           data_nascimento, estado, cidade, aceitou_direito_imagem,
+           data_aceite_direito_imagem, qr_code_hash, ativo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, NOW(3), $10, TRUE)`,
         [
           roleRow.id,
           name,
@@ -397,6 +417,8 @@ export async function PATCH(request: Request) {
           cpf,
           senhaHash,
           dataNascimento,
+          estado,
+          cidade,
           qrCodeHash,
         ],
       );
@@ -431,6 +453,8 @@ export async function PATCH(request: Request) {
       const telefone = onlyDigits(String(body?.telefone ?? ""));
       const cpf = onlyDigits(String(body?.cpf ?? ""));
       const dataNascimento = clean(body?.dataNascimento, 10);
+      const estado = normalizeEstado(String(body?.estado ?? ""));
+      const cidade = normalizeCidade(String(body?.cidade ?? ""));
       const password =
         typeof body?.password === "string" ? body.password.trim() : "";
       const requestedRaw =
@@ -465,12 +489,14 @@ export async function PATCH(request: Request) {
         !isValidCpf(cpf) ||
         !telefone ||
         !/^\d{4}-\d{2}-\d{2}$/.test(dataNascimento) ||
+        !estado ||
+        cidade.length < 2 ||
         !roleCodigo
       ) {
         return Response.json(
           {
             error:
-              "Informe nome, e-mail, CPF, telefone, data de nascimento e perfil válidos.",
+              "Informe nome, e-mail, CPF, telefone, data de nascimento, cidade, estado e perfil válidos.",
           },
           { status: 400 },
         );
@@ -523,7 +549,8 @@ export async function PATCH(request: Request) {
         await query(
           `UPDATE usuarios
            SET nome_completo = $2, email = $3, telefone = $4,
-               cpf = $5, data_nascimento = $6, senha_hash = $7
+               cpf = $5, data_nascimento = $6, estado = $7, cidade = $8,
+               senha_hash = $9
            WHERE id = $1`,
           [
             userId,
@@ -532,6 +559,8 @@ export async function PATCH(request: Request) {
             telefone,
             cpf,
             dataNascimento,
+            estado,
+            cidade,
             senhaHash,
           ],
         );
@@ -539,9 +568,9 @@ export async function PATCH(request: Request) {
         await query(
           `UPDATE usuarios
            SET nome_completo = $2, email = $3, telefone = $4,
-               cpf = $5, data_nascimento = $6
+               cpf = $5, data_nascimento = $6, estado = $7, cidade = $8
            WHERE id = $1`,
-          [userId, name, email, telefone, cpf, dataNascimento],
+          [userId, name, email, telefone, cpf, dataNascimento, estado, cidade],
         );
       }
 
@@ -762,6 +791,33 @@ export async function PATCH(request: Request) {
         entityId: id,
       });
       return Response.json({ success: true });
+    }
+
+    if (action === "togglePartnerHidden") {
+      const id = clean(body?.id, 100);
+      const updated = await updateSnctStore<ManagedPartner | undefined>(
+        (store) => {
+          const partner = store.partners.find((item) => item.id === id);
+          if (!partner) return undefined;
+          partner.hidden = !partner.hidden;
+          return partner;
+        },
+      );
+      if (!updated) {
+        return Response.json(
+          { error: "Parceiro não encontrado." },
+          { status: 404 },
+        );
+      }
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: updated.hidden ? "partner.hide" : "partner.show",
+        entity: "partner",
+        entityId: id,
+        metadata: { hidden: Boolean(updated.hidden) },
+      });
+      return Response.json({ partner: updated });
     }
 
     if (action === "updateSettings") {

@@ -3,6 +3,10 @@ import { randomBytes } from "node:crypto";
 import { recordAuditEvent } from "@/lib/audit";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import { clientExecute, query, transaction } from "@/lib/db";
+import {
+  normalizeCidade,
+  normalizeEstado,
+} from "@/lib/estados-brasil";
 import { hashPassword } from "@/lib/password";
 import { getRoleByCodigo, ROLE_CODIGO_TO_AUTH } from "@/lib/roles";
 import type { RoleCodigo } from "@/lib/snct-types";
@@ -28,6 +32,8 @@ export type ArenaMembroInput = {
   telefone: string;
   cpf: string;
   dataNascimento: string;
+  estado: string;
+  cidade: string;
   nick: string;
 };
 
@@ -155,6 +161,8 @@ export async function registrarTimeArena(
     cpf: string;
     birthIso: string;
     age: number;
+    estado: string;
+    cidade: string;
     nick: string;
     existingId: string | null;
     created: boolean;
@@ -174,6 +182,8 @@ export async function registrarTimeArena(
     const cpf = onlyDigits(String(raw?.cpf ?? ""));
     const nick = String(raw?.nick ?? "").trim();
     const birth = parseBirthDate(String(raw?.dataNascimento ?? "").trim());
+    const estado = normalizeEstado(String(raw?.estado ?? ""));
+    const cidade = normalizeCidade(String(raw?.cidade ?? ""));
 
     if (nomeCompleto.length < 2) {
       return {
@@ -208,6 +218,20 @@ export async function registrarTimeArena(
         ok: false as const,
         status: 400,
         error: `Integrante ${ordem}: informe uma data de nascimento válida.`,
+      };
+    }
+    if (!estado) {
+      return {
+        ok: false as const,
+        status: 400,
+        error: `Integrante ${ordem}: selecione o estado.`,
+      };
+    }
+    if (cidade.length < 2) {
+      return {
+        ok: false as const,
+        status: 400,
+        error: `Integrante ${ordem}: informe a cidade.`,
       };
     }
     if (nick.length < 2 || nick.length > 80) {
@@ -279,6 +303,8 @@ export async function registrarTimeArena(
       cpf,
       birthIso: birth.iso,
       age: birth.age,
+      estado,
+      cidade,
       nick,
       existingId: existing ? toId(existing.id) : null,
       created: !existing,
@@ -310,9 +336,9 @@ export async function registrarTimeArena(
             client,
             `INSERT INTO usuarios
               (role_id, nome_completo, email, telefone, cpf, senha_hash,
-               data_nascimento, aceitou_direito_imagem, data_aceite_direito_imagem,
-               qr_code_hash, ativo)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(3), $8, TRUE)`,
+               data_nascimento, estado, cidade, aceitou_direito_imagem,
+               data_aceite_direito_imagem, qr_code_hash, ativo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, NOW(3), $10, TRUE)`,
             [
               role.id,
               member.nomeCompleto,
@@ -321,6 +347,8 @@ export async function registrarTimeArena(
               member.cpf,
               senhaHash,
               member.birthIso,
+              member.estado,
+              member.cidade,
               qrCodeHash,
             ],
           );
@@ -328,6 +356,14 @@ export async function registrarTimeArena(
             throw new Error("Falha ao criar participante.");
           }
           usuarioId = toId(inserted.insertId);
+        } else {
+          await clientExecute(
+            client,
+            `UPDATE usuarios
+             SET estado = $2, cidade = $3, telefone = $4
+             WHERE id = $1`,
+            [usuarioId, member.estado, member.cidade, member.telefone],
+          );
         }
 
         memberIds.push({

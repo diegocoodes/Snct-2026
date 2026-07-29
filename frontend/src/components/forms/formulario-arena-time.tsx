@@ -17,11 +17,15 @@ import { Input } from "@/components/ui/input";
 import { InputMask } from "@/components/ui/input-mask";
 import { Label } from "@/components/ui/label";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
+import { ESTADOS_BRASIL } from "@/lib/estados-brasil";
 import { secureFetch } from "@/lib/secure-fetch";
 import { cn } from "@/lib/utils";
 
 const checkboxClassName =
   "mt-1 size-4 shrink-0 cursor-pointer rounded border border-cyan-electric/40 bg-[#111329] accent-cyan-electric";
+
+const selectClassName =
+  "h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30";
 
 const JOGOS = [
   { value: "LOL", label: "League of Legends", short: "LoL" },
@@ -37,6 +41,8 @@ type MemberDraft = {
   telefone: string;
   cpf: string;
   dataNascimento: string;
+  estado: string;
+  cidade: string;
   nick: string;
 };
 
@@ -47,6 +53,8 @@ function emptyMember(): MemberDraft {
     telefone: "",
     cpf: "",
     dataNascimento: "",
+    estado: "",
+    cidade: "",
     nick: "",
   };
 }
@@ -72,6 +80,8 @@ function isMemberFilled(member: MemberDraft) {
     onlyDigits(member.telefone).length >= 10 &&
     isValidCpf(member.cpf) &&
     Boolean(member.dataNascimento) &&
+    Boolean(member.estado) &&
+    member.cidade.trim().length >= 2 &&
     member.nick.trim().length >= 2
   );
 }
@@ -173,6 +183,8 @@ function FormularioArenaTime() {
           telefone: onlyDigits(item.telefone),
           cpf: onlyDigits(item.cpf),
           dataNascimento: item.dataNascimento,
+          estado: item.estado,
+          cidade: item.cidade.trim(),
           nick: item.nick.trim(),
         })),
         aceitouDireitoImagem,
@@ -420,6 +432,41 @@ function FormularioArenaTime() {
                     dataNascimento: event.target.value,
                   })
                 }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`membro-${activeMember}-estado`}>Estado</Label>
+              <select
+                id={`membro-${activeMember}-estado`}
+                required
+                value={member.estado}
+                onChange={(event) =>
+                  updateMember(activeMember, { estado: event.target.value })
+                }
+                className={selectClassName}
+              >
+                <option value="" disabled>
+                  Selecione
+                </option>
+                {ESTADOS_BRASIL.map((item) => (
+                  <option key={item.uf} value={item.uf}>
+                    {item.uf} — {item.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`membro-${activeMember}-cidade`}>Cidade</Label>
+              <Input
+                id={`membro-${activeMember}-cidade`}
+                required
+                minLength={2}
+                maxLength={120}
+                value={member.cidade}
+                onChange={(event) =>
+                  updateMember(activeMember, { cidade: event.target.value })
+                }
+                placeholder="Digite a cidade"
               />
             </div>
           </div>

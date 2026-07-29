@@ -2,10 +2,12 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
+  Eye,
+  EyeOff,
   FolderKanban,
   Gift,
   LayoutGrid,
@@ -25,6 +27,11 @@ import { toast } from "sonner";
 
 import { AdminEditaisPanel } from "@/components/dashboard/admin-editais-panel";
 import { AdminEstandesPanel } from "@/components/dashboard/admin-estandes-panel";
+import {
+  AdminListPagination,
+  AdminListSearch,
+  useFilteredPagination,
+} from "@/components/dashboard/admin-list-toolbar";
 import { AdminProjetosPanel } from "@/components/dashboard/admin-projetos-panel";
 import { AdminUsuariosPanel } from "@/components/dashboard/admin-usuarios-panel";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +49,25 @@ import type {
   SiteSettings,
 } from "@/lib/snct-types";
 import { secureFetch } from "@/lib/secure-fetch";
+
+function filterPartner(partner: ManagedPartner, query: string) {
+  return partner.name.toLowerCase().includes(query);
+}
+
+function filterAuditLog(log: AuditLog, query: string) {
+  const haystack = [
+    log.action,
+    log.entity,
+    log.entityId,
+    log.actorRole,
+    log.outcome,
+    log.createdAt,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
 
 type AdminDashboardProps = {
   users: PublicUser[];
@@ -66,6 +92,18 @@ function AdminDashboard({
 }: AdminDashboardProps) {
   const router = useRouter();
   const [busyAction, setBusyAction] = useState("");
+  const partnerFilter = useCallback(filterPartner, []);
+  const auditFilter = useCallback(filterAuditLog, []);
+  const partnersList = useFilteredPagination({
+    items: partners,
+    filterFn: partnerFilter,
+    pageSize: 8,
+  });
+  const auditList = useFilteredPagination({
+    items: auditLogs,
+    filterFn: auditFilter,
+    pageSize: 10,
+  });
 
   async function mutate(
     payload: Record<string, unknown>,
@@ -470,37 +508,94 @@ function AdminDashboard({
             </CardContent>
           </Card>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {partners.map((partner) => (
-              <Card key={partner.id} size="sm" className="overflow-hidden">
-                <CardContent>
-                  <div className="grid h-28 place-items-center rounded-xl bg-white p-3">
-                    <img
-                      src={partner.logo}
-                      alt={partner.name}
-                      className="max-h-24 max-w-full object-contain"
-                    />
-                  </div>
-                  <p className="mt-3 line-clamp-2 min-h-10 text-sm font-semibold text-ice-white">
-                    {partner.name}
-                  </p>
-                  <Button
-                    className="mt-3 w-full"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      if (window.confirm(`Remover ${partner.name}?`))
-                        void mutate(
-                          { action: "deletePartner", id: partner.id },
-                          "Parceiro removido.",
-                        );
-                    }}
-                  >
-                    <Trash2 aria-hidden /> Remover
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="mt-5 space-y-4">
+            <AdminListSearch
+              query={partnersList.query}
+              onQueryChange={partnersList.setQuery}
+              placeholder="Buscar parceiro…"
+              resultLabel={`${partnersList.filteredCount} resultado(s)`}
+            />
+            {partnersList.pageItems.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-blue-gray">
+                {partners.length
+                  ? "Nenhum parceiro encontrado para esta busca."
+                  : "Nenhum parceiro cadastrado."}
+              </p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {partnersList.pageItems.map((partner) => (
+                  <Card key={partner.id} size="sm" className="overflow-hidden">
+                    <CardContent>
+                      <div className="grid h-28 place-items-center rounded-xl bg-white p-3">
+                        <img
+                          src={partner.logo}
+                          alt={partner.name}
+                          className="max-h-24 max-w-full object-contain"
+                        />
+                      </div>
+                      <p className="mt-3 line-clamp-2 min-h-10 text-sm font-semibold text-ice-white">
+                        {partner.name}
+                      </p>
+                      {partner.hidden ? (
+                        <p className="mt-1 text-xs text-amber-300">
+                          Oculto no site
+                        </p>
+                      ) : null}
+                      <div className="mt-3 grid gap-2">
+                        <Button
+                          className="w-full"
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            busyAction === `togglePartnerHidden-${partner.id}`
+                          }
+                          onClick={() =>
+                            void mutate(
+                              {
+                                action: "togglePartnerHidden",
+                                id: partner.id,
+                              },
+                              partner.hidden
+                                ? "Parceiro visível no site."
+                                : "Parceiro ocultado do site.",
+                            )
+                          }
+                        >
+                          {partner.hidden ? (
+                            <>
+                              <Eye aria-hidden /> Mostrar
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff aria-hidden /> Ocultar
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          className="w-full"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            if (window.confirm(`Remover ${partner.name}?`))
+                              void mutate(
+                                { action: "deletePartner", id: partner.id },
+                                "Parceiro removido.",
+                              );
+                          }}
+                        >
+                          <Trash2 aria-hidden /> Remover
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+            <AdminListPagination
+              page={partnersList.page}
+              totalPages={partnersList.totalPages}
+              onPageChange={partnersList.setPage}
+            />
           </div>
         </TabsContent>
 
@@ -521,7 +616,13 @@ function AdminDashboard({
                 identificadores técnicos são armazenados apenas como hashes.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <AdminListSearch
+                query={auditList.query}
+                onQueryChange={auditList.setQuery}
+                placeholder="Buscar ação, perfil ou objeto…"
+                resultLabel={`${auditList.filteredCount} resultado(s)`}
+              />
               <div className="overflow-x-auto rounded-xl border border-white/10">
                 <table className="w-full min-w-3xl text-left text-sm">
                   <thead className="bg-white/5 text-xs tracking-wide text-blue-gray uppercase">
@@ -534,7 +635,7 @@ function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10">
-                    {auditLogs.map((log) => (
+                    {auditList.pageItems.map((log) => (
                       <tr key={log.id}>
                         <td className="whitespace-nowrap px-4 py-3 text-blue-gray">
                           {new Intl.DateTimeFormat("pt-BR", {
@@ -574,11 +675,18 @@ function AdminDashboard({
                   </tbody>
                 </table>
               </div>
-              {!auditLogs.length ? (
+              {!auditList.pageItems.length ? (
                 <p className="py-8 text-center text-sm text-blue-gray">
-                  Nenhum evento de segurança registrado.
+                  {auditLogs.length
+                    ? "Nenhum evento encontrado para esta busca."
+                    : "Nenhum evento de segurança registrado."}
                 </p>
               ) : null}
+              <AdminListPagination
+                page={auditList.page}
+                totalPages={auditList.totalPages}
+                onPageChange={auditList.setPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>

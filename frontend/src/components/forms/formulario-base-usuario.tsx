@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { InputMask } from "@/components/ui/input-mask";
 import { Label } from "@/components/ui/label";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
+import { ESTADOS_BRASIL } from "@/lib/estados-brasil";
 import { secureFetch } from "@/lib/secure-fetch";
 import type { RoleCodigo } from "@/lib/snct-types";
 
@@ -103,6 +104,8 @@ function FormularioBaseUsuario({
     payload.set("telefone", onlyDigits(String(form.get("telefone") ?? "")));
     payload.set("cpf", onlyDigits(String(form.get("cpf") ?? "")));
     payload.set("dataNascimento", String(form.get("dataNascimento") ?? ""));
+    payload.set("estado", String(form.get("estado") ?? "").trim().toUpperCase());
+    payload.set("cidade", String(form.get("cidade") ?? "").trim());
     payload.set("senha", isVisitante ? "VisitanteSemLogin!" : senha);
     payload.set("aceitouDireitoImagem", aceitouDireitoImagem ? "true" : "false");
     payload.set("privacyConsent", privacyConsent ? "true" : "false");
@@ -186,6 +189,39 @@ function FormularioBaseUsuario({
           required
           value={birth}
           onChange={(event) => setBirth(event.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="estado">Estado</Label>
+        <select
+          id="estado"
+          name="estado"
+          required
+          defaultValue=""
+          className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+        >
+          <option value="" disabled>
+            Selecione
+          </option>
+          {ESTADOS_BRASIL.map((item) => (
+            <option key={item.uf} value={item.uf}>
+              {item.uf} — {item.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="cidade">Cidade</Label>
+        <Input
+          id="cidade"
+          name="cidade"
+          autoComplete="address-level2"
+          minLength={2}
+          maxLength={120}
+          required
+          placeholder="Digite a cidade"
         />
       </div>
 

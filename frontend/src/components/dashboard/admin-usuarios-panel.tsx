@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   LoaderCircle,
@@ -11,6 +11,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AdminListPagination,
+  AdminListSearch,
+  useFilteredPagination,
+} from "@/components/dashboard/admin-list-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { InputMask } from "@/components/ui/input-mask";
 import { Label } from "@/components/ui/label";
 import { ROLE_LABELS } from "@/lib/roles-constants";
+import { ESTADOS_BRASIL } from "@/lib/estados-brasil";
 import type { PublicUser, UserRole } from "@/lib/snct-types";
 import { secureFetch } from "@/lib/secure-fetch";
 
@@ -59,12 +65,28 @@ function formatPhoneDisplay(telefone?: string) {
   return telefone ?? "";
 }
 
+function filterUser(user: PublicUser, query: string) {
+  const haystack = [
+    user.name,
+    user.email,
+    user.cpf,
+    user.telefone,
+    user.role,
+    ROLE_LABELS[user.role] ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
 function AdminUsuariosPanel({ users }: { users: PublicUser[] }) {
   const router = useRouter();
   const [busyAction, setBusyAction] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<PublicUser | null>(null);
   const [creating, setCreating] = useState(false);
+  const filterFn = useCallback(filterUser, []);
+  const list = useFilteredPagination({ items: users, filterFn });
 
   function openCreate() {
     setEditing(null);
@@ -127,6 +149,8 @@ function AdminUsuariosPanel({ users }: { users: PublicUser[] }) {
         telefone: payload.telefone,
         role: payload.role,
         dataNascimento: payload.dataNascimento,
+        estado: payload.estado,
+        cidade: payload.cidade,
         ...(password ? { password } : {}),
       },
       "Perfil atualizado.",
@@ -155,10 +179,16 @@ function AdminUsuariosPanel({ users }: { users: PublicUser[] }) {
             <Plus aria-hidden /> Criar usuário
           </Button>
         </CardHeader>
-        <CardContent>
-          {users.length ? (
+        <CardContent className="space-y-4">
+          <AdminListSearch
+            query={list.query}
+            onQueryChange={list.setQuery}
+            placeholder="Buscar por nome, e-mail, CPF ou perfil…"
+            resultLabel={`${list.filteredCount} resultado(s)`}
+          />
+          {list.pageItems.length ? (
             <ul className="divide-y divide-white/10">
-              {users.map((user) => (
+              {list.pageItems.map((user) => (
                 <li
                   key={user.id}
                   className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
@@ -226,9 +256,16 @@ function AdminUsuariosPanel({ users }: { users: PublicUser[] }) {
             </ul>
           ) : (
             <p className="rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-blue-gray">
-              Nenhum usuário cadastrado ainda.
+              {users.length
+                ? "Nenhum usuário encontrado para esta busca."
+                : "Nenhum usuário cadastrado ainda."}
             </p>
           )}
+          <AdminListPagination
+            page={list.page}
+            totalPages={list.totalPages}
+            onPageChange={list.setPage}
+          />
         </CardContent>
       </Card>
 
@@ -318,6 +355,39 @@ function AdminUsuariosPanel({ users }: { users: PublicUser[] }) {
                   type="date"
                   required
                   defaultValue={editing?.dataNascimento ?? ""}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="user-estado">Estado</Label>
+                <select
+                  id="user-estado"
+                  name="estado"
+                  required
+                  defaultValue={editing?.estado ?? ""}
+                  className={roleSelectClassName}
+                >
+                  <option value="" disabled>
+                    Selecione
+                  </option>
+                  {ESTADOS_BRASIL.map((item) => (
+                    <option key={item.uf} value={item.uf}>
+                      {item.uf} — {item.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="user-cidade">Cidade</Label>
+                <Input
+                  id="user-cidade"
+                  name="cidade"
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  defaultValue={editing?.cidade ?? ""}
+                  placeholder="Digite a cidade"
                 />
               </div>
             </div>

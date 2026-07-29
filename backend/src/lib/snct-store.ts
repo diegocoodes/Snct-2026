@@ -152,6 +152,8 @@ async function readStore(client?: PoolConnection) {
         cpf: string;
         senha_hash: string;
         data_nascimento: Date | string;
+        estado: string;
+        cidade: string;
         foto: string | null;
         aceitou_direito_imagem: number | boolean;
         data_aceite_direito_imagem: Date | null;
@@ -162,7 +164,8 @@ async function readStore(client?: PoolConnection) {
         role_nome: string;
       } & RowDataPacket>(`
         SELECT u.id, u.role_id, u.nome_completo, u.email, u.telefone, u.cpf,
-               u.senha_hash, u.data_nascimento, u.foto, u.aceitou_direito_imagem,
+               u.senha_hash, u.data_nascimento, u.estado, u.cidade, u.foto,
+               u.aceitou_direito_imagem,
                u.data_aceite_direito_imagem, u.qr_code_hash, u.ativo, u.created_at,
                r.codigo AS role_codigo, r.nome AS role_nome
         FROM usuarios u
@@ -206,8 +209,8 @@ async function readStore(client?: PoolConnection) {
         WHERE notice_id IS NOT NULL AND scan_status = 'clean'
         ORDER BY created_at
       `),
-      run<{ id: string; name: string; logo: string } & RowDataPacket>(`
-        SELECT id, name, logo FROM snct_partners ORDER BY sort_order, created_at
+      run<{ id: string; name: string; logo: string; hidden: number | boolean } & RowDataPacket>(`
+        SELECT id, name, logo, hidden FROM snct_partners ORDER BY sort_order, created_at
       `),
       run<{
         event_edition: string;
@@ -244,7 +247,12 @@ async function readStore(client?: PoolConnection) {
           })),
       };
     }),
-    partners: managedPartners.rows,
+    partners: managedPartners.rows.map((partner) => ({
+      id: partner.id,
+      name: partner.name,
+      logo: partner.logo,
+      hidden: Boolean(partner.hidden),
+    })),
     settings: settings.rows[0]
       ? {
           eventEdition: settings.rows[0].event_edition,
@@ -347,12 +355,19 @@ async function syncContent(client: PoolConnection, store: SnctStore) {
     await clientQuery(
       client,
       `INSERT INTO snct_partners
-        (id, name, logo, sort_order, updated_at)
-       VALUES ($1, $2, $3, $4, now())
+        (id, name, logo, hidden, sort_order, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())
        ON DUPLICATE KEY UPDATE
          name = VALUES(name), logo = VALUES(logo),
+         hidden = VALUES(hidden),
          sort_order = VALUES(sort_order), updated_at = now()`,
-      [partner.id, partner.name, partner.logo, index],
+      [
+        partner.id,
+        partner.name,
+        partner.logo,
+        partner.hidden ? 1 : 0,
+        index,
+      ],
     );
   }
   await deleteMissingIds(

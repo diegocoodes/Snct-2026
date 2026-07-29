@@ -13,6 +13,11 @@ import {
 import QRCode from "qrcode";
 import { toast } from "sonner";
 
+import {
+  AdminListPagination,
+  AdminListSearch,
+  useFilteredPagination,
+} from "@/components/dashboard/admin-list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -51,6 +56,20 @@ function statusBadgeForEstande(status: EstandeStatus) {
   if (status === "OCUPADO")
     return <StatusBadge status="info">Ocupado</StatusBadge>;
   return <StatusBadge status="neutral">Inativo</StatusBadge>;
+}
+
+function filterEstande(estande: AdminEstande, query: string) {
+  const haystack = [
+    estande.codigo,
+    estande.nome,
+    estande.localizacao,
+    estande.status,
+    estande.projetoTitulo,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
 }
 
 async function downloadStandQr(hash: string, codigo: string) {
@@ -218,6 +237,11 @@ function AdminEstandesPanel() {
     await mutate({ action: "deleteEstande", estandeId: id }, "Stand excluído.");
   }
 
+  const formKey = creating ? "new" : (editing?.id ?? "closed");
+  const statusLocked = Boolean(editing && statusNovo === "OCUPADO");
+  const filterFn = useCallback(filterEstande, []);
+  const list = useFilteredPagination({ items: estandes, filterFn });
+
   if (loading) {
     return (
       <p className="flex items-center gap-2 text-blue-gray">
@@ -226,9 +250,6 @@ function AdminEstandesPanel() {
       </p>
     );
   }
-
-  const formKey = creating ? "new" : (editing?.id ?? "closed");
-  const statusLocked = Boolean(editing && statusNovo === "OCUPADO");
 
   return (
     <>
@@ -248,14 +269,22 @@ function AdminEstandesPanel() {
             <Plus aria-hidden /> Criar stand
           </Button>
         </CardHeader>
-        <CardContent>
-          {estandes.length === 0 ? (
+        <CardContent className="space-y-4">
+          <AdminListSearch
+            query={list.query}
+            onQueryChange={list.setQuery}
+            placeholder="Buscar stand, nome ou projeto…"
+            resultLabel={`${list.filteredCount} resultado(s)`}
+          />
+          {list.pageItems.length === 0 ? (
             <p className="rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-blue-gray">
-              Nenhum stand cadastrado.
+              {estandes.length
+                ? "Nenhum stand encontrado para esta busca."
+                : "Nenhum stand cadastrado."}
             </p>
           ) : (
             <ul className="divide-y divide-white/10">
-              {estandes.map((estande) => (
+              {list.pageItems.map((estande) => (
                 <li
                   key={estande.id}
                   className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
@@ -339,6 +368,11 @@ function AdminEstandesPanel() {
               ))}
             </ul>
           )}
+          <AdminListPagination
+            page={list.page}
+            totalPages={list.totalPages}
+            onPageChange={list.setPage}
+          />
         </CardContent>
       </Card>
 

@@ -28,6 +28,8 @@ model Usuario {
   cpf                     String    @unique(map: "usuarios_cpf_unique") @db.VarChar(11)
   senhaHash               String    @map("senha_hash") @db.Text
   dataNascimento          DateTime  @map("data_nascimento") @db.Date
+  estado                  String    @db.Char(2)
+  cidade                  String    @db.VarChar(120)
   foto                    String?   @db.VarChar(500)
   aceitouDireitoImagem    Boolean   @default(false) @map("aceitou_direito_imagem")
   dataAceiteDireitoImagem DateTime? @map("data_aceite_direito_imagem")
@@ -292,6 +294,7 @@ model SnctPartner {
   id        String   @id @db.VarChar(64)
   name      String   @db.Text
   logo      String   @db.Text
+  hidden    Boolean  @default(false)
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)

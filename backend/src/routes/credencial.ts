@@ -19,6 +19,8 @@ type UsuarioCredencialRow = {
   cpf: string;
   senha_hash: string;
   data_nascimento: Date | string;
+  estado?: string;
+  cidade?: string;
   foto: string | null;
   aceitou_direito_imagem: number | boolean;
   data_aceite_direito_imagem: Date | null;
@@ -57,7 +59,8 @@ export async function POST_VISITANTE_CPF(request: Request) {
     const today = todayInEventTimezone();
     const result = await query<UsuarioCredencialRow>(
       `SELECT u.id, u.role_id, u.nome_completo, u.email, u.telefone, u.cpf,
-              u.senha_hash, u.data_nascimento, u.foto, u.aceitou_direito_imagem,
+              u.senha_hash, u.data_nascimento, u.estado, u.cidade, u.foto,
+              u.aceitou_direito_imagem,
               u.data_aceite_direito_imagem, u.qr_code_hash, u.ativo, u.created_at,
               r.codigo AS role_codigo, r.nome AS role_nome,
               EXISTS(

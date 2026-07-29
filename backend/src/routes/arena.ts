@@ -19,6 +19,8 @@ function parseMembros(raw: unknown): ArenaMembroInput[] {
       telefone: String(row.telefone ?? ""),
       cpf: String(row.cpf ?? ""),
       dataNascimento: String(row.dataNascimento ?? ""),
+      estado: String(row.estado ?? ""),
+      cidade: String(row.cidade ?? ""),
       nick: String(row.nick ?? ""),
     };
   });
