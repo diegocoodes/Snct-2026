@@ -51,7 +51,34 @@ type ProjetoInfo = {
   descricao: string | null;
   instituicao: string;
   professor: { id: string; nomeCompleto: string; email: string };
-  alunos: { id: string; nomeCompleto: string }[];
+  alunos: {
+    id: string;
+    usuarioId?: string;
+    nomeCompleto: string;
+    idade?: number;
+  }[];
+};
+
+type TitulacaoOpcao = {
+  codigo: string;
+  titulo: string;
+  faixaEtaria: string;
+  referenciaEscolar: string;
+  enfase: string;
+  disponivel: boolean;
+  concedida: {
+    alunoId: string;
+    alunoNome: string;
+    standCodigo: string;
+  } | null;
+};
+
+type TitulacoesEstado = {
+  dataEvento: string;
+  totalPorDia: number;
+  disponiveis: number;
+  usadas: number;
+  opcoes: TitulacaoOpcao[];
 };
 
 type AvaliacaoListaItem = {
@@ -120,6 +147,11 @@ function AvaliadorPanel() {
   const [criterios, setCriterios] = useState<Criterio[]>([]);
   const [totalMaximo, setTotalMaximo] = useState(100);
   const [escalaDesempenho, setEscalaDesempenho] = useState<EscalaItem[]>([]);
+  const [titulacoes, setTitulacoes] = useState<TitulacoesEstado | null>(null);
+  const [titulacaoAlunoPorCategoria, setTitulacaoAlunoPorCategoria] = useState<
+    Record<string, string>
+  >({});
+  const [titulacaoBusy, setTitulacaoBusy] = useState<string | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
   const [observacoes, setObservacoes] = useState("");
 
@@ -176,6 +208,9 @@ function AvaliadorPanel() {
     setNotas({});
     setObservacoes("");
     setStandAtribuido(null);
+    setTitulacoes(null);
+    setTitulacaoAlunoPorCategoria({});
+    setTitulacaoBusy(null);
     setManualHash("");
     setCameraError("");
     setMode("inicio");
@@ -217,6 +252,7 @@ function AvaliadorPanel() {
           criterios?: Criterio[];
           totalMaximo?: number;
           escalaDesempenho?: EscalaItem[];
+          titulacoes?: TitulacoesEstado;
         };
 
         if (response.status === 409 || data.jaAvaliado) {
@@ -239,6 +275,8 @@ function AvaliadorPanel() {
         setCriterios(data.criterios ?? []);
         setTotalMaximo(data.totalMaximo ?? 100);
         setEscalaDesempenho(data.escalaDesempenho ?? []);
+        setTitulacoes(data.titulacoes ?? null);
+        setTitulacaoAlunoPorCategoria({});
         const next: Record<string, string> = {};
         for (const criterio of data.criterios ?? []) {
           next[criterio.key] = "";
@@ -375,6 +413,64 @@ function AvaliadorPanel() {
     setCameraError("");
     setMode("confirmar-qr");
     setScannerReady((value) => value + 1);
+  }
+
+  async function concederTitulo(categoria: string) {
+    if (!stand || !projeto) return;
+    const alunoId = titulacaoAlunoPorCategoria[categoria];
+    if (!alunoId) {
+      toast.error("Selecione a aluna/aluno para conceder este título.");
+      return;
+    }
+    setTitulacaoBusy(categoria);
+    try {
+      const response = await secureFetch("/api/avaliador/titulacoes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoria,
+          alunoId,
+          standId: stand.id,
+          projetoId: projeto.id,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        titulacao?: { titulo: string; alunoNome: string };
+        dataEvento?: string;
+        totalPorDia?: number;
+        disponiveis?: number;
+        usadas?: number;
+        opcoes?: TitulacaoOpcao[];
+      };
+      if (!response.ok) {
+        toast.error(data.error ?? "Não foi possível conceder o título.");
+        return;
+      }
+      toast.success(
+        data.titulacao
+          ? `Título "${data.titulacao.titulo}" concedido a ${data.titulacao.alunoNome}.`
+          : "Título concedido.",
+      );
+      if (data.opcoes) {
+        setTitulacoes({
+          dataEvento: data.dataEvento ?? titulacoes?.dataEvento ?? "",
+          totalPorDia: data.totalPorDia ?? 3,
+          disponiveis: data.disponiveis ?? 0,
+          usadas: data.usadas ?? 0,
+          opcoes: data.opcoes,
+        });
+      }
+      setTitulacaoAlunoPorCategoria((prev) => {
+        const next = { ...prev };
+        delete next[categoria];
+        return next;
+      });
+    } catch {
+      toast.error("Falha de rede ao conceder o título.");
+    } finally {
+      setTitulacaoBusy(null);
+    }
   }
 
   async function onSubmitAvaliacao(event: FormEvent) {
@@ -730,6 +826,160 @@ function AvaliadorPanel() {
                 <strong className="font-display text-xl">{total}</strong>
                 <span className="text-blue-gray"> / {totalMaximo}</span>
               </div>
+
+              <section className="space-y-4 rounded-2xl border border-cyan-electric/20 bg-cyan-electric/[0.04] p-4">
+                <div>
+                  <h3 className="font-display text-sm tracking-wide text-cyan-electric uppercase">
+                    Avaliação extra — titulações do dia
+                  </h3>
+                  <p className="mt-2 text-sm text-blue-gray">
+                    Além da nota do stand, você pode reconhecer individualmente
+                    uma aluna/aluno com um dos 3 títulos abaixo. Cada título só
+                    pode ser concedido <strong className="text-ice-white">uma vez por dia</strong>{" "}
+                    e para <strong className="text-ice-white">um único candidato</strong>.
+                    Ao usar as 3 titulações, novas só voltam no próximo dia do
+                    evento. Restam{" "}
+                    <strong className="text-ice-white">
+                      {titulacoes?.disponiveis ?? 0}/
+                      {titulacoes?.totalPorDia ?? 3}
+                    </strong>{" "}
+                    hoje.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-white/10">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-white/[0.04] text-xs tracking-wide text-blue-gray uppercase">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Categoria</th>
+                        <th className="px-3 py-2 font-medium">Faixa etária</th>
+                        <th className="px-3 py-2 font-medium">
+                          Referência escolar
+                        </th>
+                        <th className="px-3 py-2 font-medium">Ênfase</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(titulacoes?.opcoes ?? []).map((item) => (
+                        <tr
+                          key={item.codigo}
+                          className="border-t border-white/10 text-blue-gray"
+                        >
+                          <td className="px-3 py-2 text-ice-white">
+                            {item.titulo}
+                          </td>
+                          <td className="px-3 py-2">{item.faixaEtaria}</td>
+                          <td className="px-3 py-2">{item.referenciaEscolar}</td>
+                          <td className="px-3 py-2">{item.enfase}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div>
+                  <p className="text-xs tracking-wide text-blue-gray uppercase">
+                    Alunas/alunos deste stand
+                  </p>
+                  {projeto.alunos.length === 0 ? (
+                    <p className="mt-2 text-sm text-blue-gray">
+                      Nenhum aluno cadastrado neste projeto.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {projeto.alunos.map((aluno) => (
+                        <li
+                          key={aluno.id}
+                          className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-ice-white"
+                        >
+                          {aluno.nomeCompleto}
+                          {typeof aluno.idade === "number" ? (
+                            <span className="ml-2 text-blue-gray">
+                              ({aluno.idade} anos)
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {(titulacoes?.opcoes ?? []).map((opcao) => (
+                    <div
+                      key={opcao.codigo}
+                      className="rounded-xl border border-white/10 bg-[#111329]/60 p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-ice-white">
+                          {opcao.titulo}
+                        </p>
+                        {opcao.disponivel ? (
+                          <StatusBadge status="info">Disponível</StatusBadge>
+                        ) : (
+                          <StatusBadge status="success">Usado hoje</StatusBadge>
+                        )}
+                      </div>
+                      {opcao.concedida ? (
+                        <p className="mt-2 text-sm text-blue-gray">
+                          Concedido a{" "}
+                          <span className="text-ice-white">
+                            {opcao.concedida.alunoNome}
+                          </span>{" "}
+                          (stand {opcao.concedida.standCodigo}).
+                        </p>
+                      ) : (
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <Label htmlFor={`titulacao-${opcao.codigo}`}>
+                              Selecionar aluna/aluno
+                            </Label>
+                            <select
+                              id={`titulacao-${opcao.codigo}`}
+                              className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                              value={titulacaoAlunoPorCategoria[opcao.codigo] ?? ""}
+                              onChange={(event) =>
+                                setTitulacaoAlunoPorCategoria((prev) => ({
+                                  ...prev,
+                                  [opcao.codigo]: event.target.value,
+                                }))
+                              }
+                              disabled={projeto.alunos.length === 0}
+                            >
+                              <option value="">Selecione</option>
+                              {projeto.alunos.map((aluno) => (
+                                <option key={aluno.id} value={aluno.id}>
+                                  {aluno.nomeCompleto}
+                                  {typeof aluno.idade === "number"
+                                    ? ` (${aluno.idade} anos)`
+                                    : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={
+                              titulacaoBusy === opcao.codigo ||
+                              projeto.alunos.length === 0
+                            }
+                            onClick={() => void concederTitulo(opcao.codigo)}
+                          >
+                            {titulacaoBusy === opcao.codigo ? (
+                              <LoaderCircle
+                                className="size-4 animate-spin"
+                                aria-hidden
+                              />
+                            ) : null}
+                            Conceder título
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
 
               <div className="space-y-2">
                 <Label htmlFor="observacoes">Observações do avaliador</Label>

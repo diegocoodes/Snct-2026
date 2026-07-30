@@ -46,6 +46,8 @@ model Usuario {
   escolas            ProfessorEscola[]
   vinculoAluno       ProfessorTemaAluno?
   avaliacoes         Avaliacao[]
+  titulacoesConcedidas AvaliadorTitulacao[] @relation("TitulacaoAvaliador")
+  titulacoesRecebidas  AvaliadorTitulacao[] @relation("TitulacaoAlunoUsuario")
   estandesReservados AvaliadorStandSorteio[]
   arenaTimesResponsavel ArenaTime[]       @relation("ArenaTimeResponsavel")
   arenaMembros       ArenaTimeMembro[]
@@ -163,6 +165,7 @@ model Stand {
   projeto     Projeto?
   avaliacoes Avaliacao[]
   reservas   AvaliadorStandSorteio[]
+  titulacoes AvaliadorTitulacao[]
 
   @@index([status], map: "estandes_status_idx")
   @@map("estandes")
@@ -199,6 +202,7 @@ model Projeto {
   stand  Stand?               @relation(fields: [standId], references: [id], onUpdate: NoAction, map: "professor_temas_estande_fk")
   alunos ProfessorTemaAluno[]
   avaliacoes Avaliacao[]
+  titulacoes AvaliadorTitulacao[]
 
   @@index([escolaId], map: "professor_temas_escola_idx")
   @@index([status], map: "professor_temas_status_idx")
@@ -216,6 +220,7 @@ model ProfessorTemaAluno {
   projeto   Projeto                    @relation(fields: [projetoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_tema_alunos_tema_fk")
   usuario    Usuario                   @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_tema_alunos_usuario_fk")
   documentos ProfessorAlunoDocumento[]
+  titulacoes AvaliadorTitulacao[]
 
   @@index([projetoId], map: "professor_tema_alunos_tema_idx")
   @@map("professor_tema_alunos")
@@ -392,4 +397,29 @@ model AvaliadorStandSorteio {
   @@index([avaliadorUsuarioId], map: "avaliador_stand_sorteios_avaliador_idx")
   @@index([expiresAt], map: "avaliador_stand_sorteios_expires_idx")
   @@map("avaliador_stand_sorteios")
+}
+
+/// Titulação diária concedida por avaliador a um aluno (1 de cada categoria por dia).
+model AvaliadorTitulacao {
+  id                 BigInt   @id @default(autoincrement())
+  avaliadorUsuarioId BigInt   @map("avaliador_usuario_id")
+  alunoId            BigInt   @map("aluno_id")
+  alunoUsuarioId     BigInt   @map("aluno_usuario_id")
+  projetoId          BigInt   @map("projeto_id")
+  standId            BigInt   @map("stand_id")
+  categoria          String   @db.VarChar(32)
+  dataEvento         DateTime @map("data_evento") @db.Date
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  avaliador    Usuario            @relation("TitulacaoAvaliador", fields: [avaliadorUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_titulacoes_avaliador_fk")
+  aluno        ProfessorTemaAluno @relation(fields: [alunoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_titulacoes_aluno_fk")
+  alunoUsuario Usuario            @relation("TitulacaoAlunoUsuario", fields: [alunoUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_titulacoes_aluno_usuario_fk")
+  projeto      Projeto            @relation(fields: [projetoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_titulacoes_projeto_fk")
+  stand        Stand              @relation(fields: [standId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_titulacoes_stand_fk")
+
+  @@unique([avaliadorUsuarioId, categoria, dataEvento], map: "avaliador_titulacoes_avaliador_cat_dia_unique")
+  @@index([alunoId], map: "avaliador_titulacoes_aluno_idx")
+  @@index([dataEvento], map: "avaliador_titulacoes_dia_idx")
+  @@index([standId], map: "avaliador_titulacoes_stand_idx")
+  @@map("avaliador_titulacoes")
 }

@@ -181,7 +181,12 @@ export async function getStandParaAvaliacao(qrCodeHash: string) {
             },
           },
           alunos: {
-            select: { id: true, nomeCompleto: true },
+            select: {
+              id: true,
+              nomeCompleto: true,
+              usuarioId: true,
+              usuario: { select: { dataNascimento: true } },
+            },
             orderBy: { nomeCompleto: "asc" },
             take: 4,
           },
@@ -208,6 +213,20 @@ export async function getStandParaAvaliacao(qrCodeHash: string) {
     };
   }
 
+  function ageFromBirth(value: Date) {
+    const iso = value.toISOString().slice(0, 10);
+    const [y, m, d] = iso.split("-").map(Number);
+    const now = new Date();
+    let age = now.getFullYear() - y;
+    if (
+      now.getMonth() + 1 < m ||
+      (now.getMonth() + 1 === m && now.getDate() < d)
+    ) {
+      age -= 1;
+    }
+    return age;
+  }
+
   return {
     ok: true as const,
     stand: {
@@ -229,10 +248,15 @@ export async function getStandParaAvaliacao(qrCodeHash: string) {
         nomeCompleto: projeto.escola.professor.nomeCompleto,
         email: projeto.escola.professor.email,
       },
-      alunos: projeto.alunos.map((aluno) => ({
-        id: toId(aluno.id),
-        nomeCompleto: aluno.nomeCompleto,
-      })),
+      alunos: projeto.alunos.map((aluno) => {
+        const age = ageFromBirth(aluno.usuario.dataNascimento);
+        return {
+          id: toId(aluno.id),
+          usuarioId: toId(aluno.usuarioId),
+          nomeCompleto: aluno.nomeCompleto,
+          idade: age,
+        };
+      }),
     },
   };
 }

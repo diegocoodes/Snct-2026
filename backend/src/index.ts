@@ -112,6 +112,8 @@ mount("post", "/api/professor", professor.POST);
 mount("delete", "/api/professor", professor.DELETE);
 mount("get", "/api/avaliador/criterios", avaliador.GET_CRITERIOS);
 mount("get", "/api/avaliador/avaliacoes", avaliador.GET_MINHAS_AVALIACOES);
+mount("get", "/api/avaliador/titulacoes", avaliador.GET_TITULACOES);
+mount("post", "/api/avaliador/titulacoes", avaliador.POST_TITULACAO);
 mount("post", "/api/avaliador/comecar-avaliacao", avaliador.POST_COMECAR_AVALIACAO);
 mount("get", "/api/avaliador/stand-sorteado", avaliador.GET_STAND_SORTEADO);
 mount("get", "/api/avaliador/stand/:qrCodeHash", (request, qrCodeHash) =>

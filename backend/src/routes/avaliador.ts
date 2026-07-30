@@ -16,6 +16,11 @@ import {
   enforceRateLimit,
   securityErrorResponse,
 } from "@/lib/request-security";
+import {
+  concederTitulacao,
+  getTitulacoesDoDia,
+  listTitulacaoCategorias,
+} from "@/lib/titulacoes";
 
 export async function GET_CRITERIOS(request: Request) {
   try {
@@ -41,6 +46,77 @@ export async function GET_MINHAS_AVALIACOES(request: Request) {
     }
     const avaliacoes = await listAvaliacoesDoAvaliador(session.userId);
     return Response.json({ avaliacoes });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
+
+export async function GET_TITULACOES(request: Request) {
+  try {
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    const titulacoes = await getTitulacoesDoDia(session.userId);
+    return Response.json({
+      ...titulacoes,
+      categorias: listTitulacaoCategorias(),
+    });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
+
+export async function POST_TITULACAO(request: Request) {
+  try {
+    assertTrustedMutation(request);
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    await enforceRateLimit({
+      request,
+      scope: "avaliador-titulacao",
+      identifier: session.userId,
+      limit: 30,
+      windowSeconds: 60,
+    });
+
+    const body = (await request.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    const alunoId = typeof body?.alunoId === "string" ? body.alunoId : "";
+    const standId = typeof body?.standId === "string" ? body.standId : "";
+    const projetoId =
+      typeof body?.projetoId === "string" ? body.projetoId : "";
+    const categoria =
+      typeof body?.categoria === "string" ? body.categoria : "";
+
+    if (!alunoId || !standId || !projetoId || !categoria) {
+      return Response.json(
+        { error: "Informe aluno, stand, projeto e categoria." },
+        { status: 400 },
+      );
+    }
+
+    const result = await concederTitulacao({
+      avaliadorUsuarioId: session.userId,
+      alunoId,
+      standId,
+      projetoId,
+      categoria,
+    });
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
+
+    const titulacoes = await getTitulacoesDoDia(session.userId);
+    return Response.json({
+      ok: true,
+      titulacao: result.titulacao,
+      ...titulacoes,
+    });
   } catch (error) {
     return securityErrorResponse(error);
   }
@@ -168,12 +244,15 @@ export async function GET_STAND(request: Request, qrCodeHash: string) {
       );
     }
 
+    const titulacoes = await getTitulacoesDoDia(session.userId);
+
     return Response.json({
       stand: result.stand,
       projeto: result.projeto,
       criterios: AVALIACAO_CRITERIOS,
       totalMaximo: AVALIACAO_TOTAL_MAXIMO,
       escalaDesempenho: ESCALA_DESEMPENHO,
+      titulacoes,
       avaliacao: null,
       jaAvaliado: false,
       reservaExpiraEm: reserva?.expiresAt ?? null,

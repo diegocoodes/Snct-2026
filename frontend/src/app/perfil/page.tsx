@@ -5,6 +5,7 @@ import { School } from "lucide-react";
 
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { MfaEnrollment } from "@/components/auth/mfa-enrollment";
+import { AvaliadorTitulacoesCard } from "@/components/avaliador/avaliador-titulacoes-card";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { StaffCheckinPanel } from "@/components/check-in/staff-checkin-panel";
 import { VisitorPass } from "@/components/dashboard/visitor-pass";
@@ -97,6 +98,7 @@ export default async function ProfilePage() {
             Avaliar stands (escanear QR)
           </Button>
         </div>
+        <AvaliadorTitulacoesCard />
         <VisitorPass visitor={toPublicUser(visitor)} showSecurity={false} />
       </DashboardShell>
     );
