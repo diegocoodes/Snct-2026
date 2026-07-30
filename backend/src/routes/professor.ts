@@ -101,6 +101,7 @@ export async function POST(request: Request) {
 
       const result = await createAluno(temaId, session.userId, {
         nomeCompleto: String(form.get("nomeCompleto") ?? ""),
+        nomeResponsavel: String(form.get("nomeResponsavel") ?? ""),
         email: String(form.get("email") ?? ""),
         telefone: String(form.get("telefone") ?? ""),
         cpf: String(form.get("cpf") ?? ""),

@@ -185,6 +185,37 @@ function HeroSection({
               aria-hidden="true"
               className="absolute top-1/2 left-1/3 -z-10 h-32 w-4/5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-vibrant/18 blur-[70px]"
             />
+            <motion.div
+              variants={itemVariants}
+              animate={shouldReduceMotion ? undefined : { y: [0, -6, 0] }}
+              transition={{
+                duration: 4.8,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+              className="relative mx-auto mb-7 w-full max-w-[17rem] lg:hidden"
+            >
+              <div
+                aria-hidden
+                className="absolute inset-[12%] -z-10 rounded-full bg-purple-vibrant/25 blur-3xl"
+              />
+              {heroImageUrl.startsWith("/") ? (
+                <Image
+                  src={heroImageUrl}
+                  alt={`Símbolo Ciência e Tecnologia da SNCT ${eventEdition}`}
+                  width={560}
+                  height={405}
+                  className="h-auto w-full object-contain drop-shadow-[0_0_28px_rgb(0_229_255/24%)]"
+                  preload
+                />
+              ) : (
+                <img
+                  src={heroImageUrl}
+                  alt={`Símbolo Ciência e Tecnologia da SNCT ${eventEdition}`}
+                  className="h-auto w-full object-contain drop-shadow-[0_0_28px_rgb(0_229_255/24%)]"
+                />
+              )}
+            </motion.div>
             <h1 id="hero-title" className="font-display text-ice-white">
               <motion.span
                 variants={itemVariants}
@@ -296,7 +327,7 @@ function HeroSection({
                   },
                 }
           }
-          className="relative z-10 mx-auto min-h-[22rem] w-full max-w-xl sm:min-h-[26rem] lg:min-h-[30rem]"
+          className="relative z-10 mx-auto hidden min-h-[30rem] w-full max-w-xl lg:block"
         >
           <div
             aria-hidden="true"

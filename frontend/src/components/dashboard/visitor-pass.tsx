@@ -5,7 +5,6 @@ import Image from "next/image";
 import {
   CheckCircle2,
   Download,
-  Gift,
   QrCode,
   UserRound,
 } from "lucide-react";
@@ -66,8 +65,8 @@ function VisitorPass({
         </p>
       </div>
 
-      <div className="mt-9 grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
-        <Card className="relative overflow-hidden border-cyan-electric/20 bg-[#101226]/90">
+      <div className="mt-9 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+        <Card className="relative overflow-hidden border-cyan-electric/20 bg-[#101226]/90 lg:order-2">
           <div
             aria-hidden
             className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-electric via-purple-vibrant to-magenta-neon"
@@ -113,7 +112,7 @@ function VisitorPass({
           </CardContent>
         </Card>
 
-        <div className="grid content-start gap-4">
+        <div className="grid content-start gap-4 lg:order-1">
           <Card>
             <CardContent className="flex items-start gap-4">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-cyan-electric/10 text-cyan-electric">
@@ -148,7 +147,7 @@ function VisitorPass({
             <CardHeader>
               <CardTitle>Status no evento</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
+            <CardContent className="grid gap-3">
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-4">
                 <CheckCircle2
                   className={
@@ -164,24 +163,6 @@ function VisitorPass({
                     {visitor.checkedInAt
                       ? "Check-in concluído"
                       : "Aguardando chegada"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-4">
-                <Gift
-                  className={
-                    visitor.giftDeliveredAt
-                      ? "size-5 text-magenta-neon"
-                      : "size-5 text-blue-gray"
-                  }
-                  aria-hidden
-                />
-                <div>
-                  <p className="font-semibold text-ice-white">Brinde</p>
-                  <p className="text-xs text-blue-gray">
-                    {visitor.giftDeliveredAt
-                      ? "Entrega registrada"
-                      : "Ainda não entregue"}
                   </p>
                 </div>
               </div>

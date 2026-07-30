@@ -1,5 +1,6 @@
 import { Accessibility, ExternalLink, MapPin, Navigation } from "lucide-react";
 
+import { ArenaGamerSection } from "@/components/event/arena-gamer-section";
 import { EventFooter } from "@/components/event/event-footer";
 import { EventHeader } from "@/components/event/event-header";
 import { HeroSection } from "@/components/event/hero-section";
@@ -30,6 +31,7 @@ export default async function Home() {
         <NewsCarousel newsItems={newsItems} />
 
         <HighlightsSection events={store.events} notices={store.notices} />
+        <ArenaGamerSection />
 
         <section
           id="localizacao"

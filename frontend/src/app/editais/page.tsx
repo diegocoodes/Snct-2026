@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, FileText } from "lucide-react";
 
 import { EventFooter } from "@/components/event/event-footer";
@@ -42,12 +43,25 @@ export default async function NoticesPage() {
               <div className="mt-10 grid gap-4">
                 {store.notices.map((notice) => {
                   const periodLabel = getNoticePeriodLabel(notice);
+                  const isArenaGamer = /arena\s*gamer/i.test(notice.title);
                   return (
                     <Card
                       key={notice.id}
                       className="border-cyan-electric/12 bg-white/[0.025]"
                     >
                       <CardContent>
+                        {isArenaGamer ? (
+                          <div className="mb-5 overflow-hidden rounded-2xl border border-cyan-electric/15 bg-[#080914] p-3">
+                            <Image
+                              src="/images/ARENAGAMER.png"
+                              alt="Arte oficial completa da Arena Gamer"
+                              width={1122}
+                              height={1402}
+                              sizes="(max-width: 1024px) 100vw, 64rem"
+                              className="mx-auto h-auto max-h-[42rem] w-auto max-w-full object-contain"
+                            />
+                          </div>
+                        ) : null}
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <h3 className="font-display text-lg font-semibold leading-7 text-ice-white">

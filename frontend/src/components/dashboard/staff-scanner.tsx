@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
-  Gift,
   Keyboard,
   LoaderCircle,
   ScanLine,
@@ -29,17 +28,14 @@ function StaffScanner() {
   const [visitor, setVisitor] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function processToken(
-    token: string,
-    action: "checkin" | "gift" = "checkin",
-  ) {
+  async function processToken(token: string) {
     if (!token || processingRef.current) return;
     processingRef.current = true;
     setLoading(true);
     const response = await secureFetch("/api/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, action }),
+      body: JSON.stringify({ token, action: "checkin" }),
     });
     const result = (await response.json()) as {
       error?: string;
@@ -50,11 +46,7 @@ function StaffScanner() {
     } else {
       setVisitor(result.visitor);
       setManualToken(result.visitor.visitorHash ?? token);
-      toast.success(
-        action === "gift"
-          ? "Entrega do brinde registrada."
-          : "Check-in confirmado.",
-      );
+      toast.success("Check-in confirmado.");
       scannerRef.current?.stop();
     }
     setLoading(false);
@@ -104,8 +96,7 @@ function StaffScanner() {
           Check-in de visitantes
         </h1>
         <p className="mt-4 leading-7 text-blue-gray">
-          Aponte a câmera para o QR Code pessoal. Depois da validação, registre
-          a entrega do brinde quando aplicável.
+          Aponte a câmera para o QR Code pessoal para confirmar o check-in.
         </p>
       </div>
 
@@ -197,29 +188,11 @@ function StaffScanner() {
                       <Badge className="bg-emerald-500/15 text-emerald-300">
                         Check-in confirmado
                       </Badge>
-                      {visitor.giftDeliveredAt ? (
-                        <Badge className="bg-magenta-neon/15 text-[#FF9AE8]">
-                          Brinde entregue
-                        </Badge>
-                      ) : null}
                     </div>
                   </div>
                 </div>
                 <Button
                   className="mt-4 w-full"
-                  variant="glow"
-                  disabled={Boolean(visitor.giftDeliveredAt) || loading}
-                  onClick={() =>
-                    void processToken(visitor.visitorHash ?? "", "gift")
-                  }
-                >
-                  <Gift aria-hidden />{" "}
-                  {visitor.giftDeliveredAt
-                    ? "Brinde já entregue"
-                    : "Registrar entrega do brinde"}
-                </Button>
-                <Button
-                  className="mt-3 w-full"
                   variant="outline"
                   onClick={restartScanner}
                 >

@@ -1,9 +1,15 @@
 import { requireRole } from "@/lib/auth";
 import {
   AVALIACAO_CRITERIOS,
-  getAvaliacaoDoAvaliador,
+  AVALIACAO_TOTAL_MAXIMO,
+  ESCALA_DESEMPENHO,
+  getAvaliacaoDoAvaliadorPorStand,
+  getReservaAtivaDoStand,
   getStandParaAvaliacao,
+  JA_AVALIADO_MSG,
+  listAvaliacoesDoAvaliador,
   salvarAvaliacao,
+  selecionarProximoStand,
 } from "@/lib/avaliacoes";
 import {
   assertTrustedMutation,
@@ -17,7 +23,84 @@ export async function GET_CRITERIOS(request: Request) {
     if (!session) {
       return Response.json({ error: "Não autorizado." }, { status: 401 });
     }
-    return Response.json({ criterios: AVALIACAO_CRITERIOS });
+    return Response.json({
+      criterios: AVALIACAO_CRITERIOS,
+      totalMaximo: AVALIACAO_TOTAL_MAXIMO,
+      escalaDesempenho: ESCALA_DESEMPENHO,
+    });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
+
+export async function GET_MINHAS_AVALIACOES(request: Request) {
+  try {
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    const avaliacoes = await listAvaliacoesDoAvaliador(session.userId);
+    return Response.json({ avaliacoes });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
+
+export async function POST_COMECAR_AVALIACAO(request: Request) {
+  try {
+    assertTrustedMutation(request);
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    await enforceRateLimit({
+      request,
+      scope: "avaliador-comecar",
+      identifier: session.userId,
+      limit: 20,
+      windowSeconds: 60,
+    });
+    const stand = await selecionarProximoStand(session.userId);
+    if (!stand) {
+      return Response.json(
+        {
+          error:
+            "Não há stands aptos para distribuição agora. Todos os disponíveis já foram avaliados por você, estão reservados, inativos ou no limite de avaliações.",
+        },
+        { status: 404 },
+      );
+    }
+    return Response.json({ stand });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
+
+/** Mantido por compatibilidade com clientes antigos. */
+export async function GET_STAND_SORTEADO(request: Request) {
+  try {
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    await enforceRateLimit({
+      request,
+      scope: "avaliador-comecar",
+      identifier: session.userId,
+      limit: 20,
+      windowSeconds: 60,
+    });
+    const stand = await selecionarProximoStand(session.userId);
+    if (!stand) {
+      return Response.json(
+        {
+          error:
+            "Não há stands aptos para distribuição agora. Todos os disponíveis já foram avaliados por você, estão reservados, inativos ou no limite de avaliações.",
+        },
+        { status: 404 },
+      );
+    }
+    return Response.json({ stand });
   } catch (error) {
     return securityErrorResponse(error);
   }
@@ -49,16 +132,51 @@ export async function GET_STAND(request: Request, qrCodeHash: string) {
       );
     }
 
-    const avaliacao = await getAvaliacaoDoAvaliador(
+    if (result.stand.status === "INATIVO") {
+      return Response.json(
+        { error: "Este stand não está disponível para avaliação." },
+        { status: 400 },
+      );
+    }
+
+    const avaliacao = await getAvaliacaoDoAvaliadorPorStand(
       session.userId,
-      result.projeto.id,
+      result.stand.id,
     );
+
+    if (avaliacao) {
+      return Response.json(
+        {
+          error: JA_AVALIADO_MSG,
+          jaAvaliado: true,
+          stand: result.stand,
+          projeto: result.projeto,
+          avaliacao,
+        },
+        { status: 409 },
+      );
+    }
+
+    const reserva = await getReservaAtivaDoStand(result.stand.id);
+    if (reserva && reserva.avaliadorUsuarioId !== session.userId) {
+      return Response.json(
+        {
+          error: "Este stand está reservado para outro avaliador.",
+          reservado: true,
+        },
+        { status: 409 },
+      );
+    }
 
     return Response.json({
       stand: result.stand,
       projeto: result.projeto,
       criterios: AVALIACAO_CRITERIOS,
-      avaliacao,
+      totalMaximo: AVALIACAO_TOTAL_MAXIMO,
+      escalaDesempenho: ESCALA_DESEMPENHO,
+      avaliacao: null,
+      jaAvaliado: false,
+      reservaExpiraEm: reserva?.expiresAt ?? null,
     });
   } catch (error) {
     return securityErrorResponse(error);

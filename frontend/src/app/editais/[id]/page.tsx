@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
@@ -55,6 +56,7 @@ export default async function NoticeDetailPage({
     notice.documents.find((document) =>
       document.mimeType.toLowerCase().includes("pdf"),
     ) ?? notice.documents[0];
+  const isArenaGamer = /arena\s*gamer/i.test(notice.title);
 
   return (
     <>
@@ -98,6 +100,19 @@ export default async function NoticeDetailPage({
                 </Badge>
               </CardHeader>
               <CardContent className="space-y-8">
+                {isArenaGamer ? (
+                  <div className="overflow-hidden rounded-2xl border border-cyan-electric/15 bg-[#080914] p-3 sm:p-5">
+                    <Image
+                      src="/images/ARENAGAMER.png"
+                      alt="Arte oficial completa da Arena Gamer"
+                      width={1122}
+                      height={1402}
+                      priority
+                      sizes="(max-width: 1024px) 100vw, 64rem"
+                      className="mx-auto h-auto max-h-[56rem] w-auto max-w-full object-contain"
+                    />
+                  </div>
+                ) : null}
                 <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:grid-cols-2">
                   <div className="flex items-start gap-3">
                     <span className="grid size-10 place-items-center rounded-xl bg-cyan-electric/10 text-cyan-electric">

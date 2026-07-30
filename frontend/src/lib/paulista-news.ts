@@ -3,7 +3,24 @@ import "server-only";
 import type { NewsItem } from "@/config/news";
 
 const PAULISTA_NEWS_API =
-  "https://paulista.pe.gov.br/wp-json/wp/v2/posts?per_page=9&_embed=1";
+  "https://paulista.pe.gov.br/wp-json/wp/v2/posts?per_page=30&_embed=1";
+
+const TECHNOLOGY_TERMS = [
+  "tecnologia",
+  "tecnológico",
+  "tecnológica",
+  "inovação",
+  "inovador",
+  "ciência",
+  "científico",
+  "digital",
+  "software",
+  "robótica",
+  "inteligência artificial",
+  "internet",
+  "computação",
+  "startup",
+];
 
 type WordpressTerm = {
   name?: string;
@@ -81,6 +98,18 @@ function isOfficialUrl(value?: string) {
   }
 }
 
+function isTechnologyNews(post: WordpressPost) {
+  const terms = post._embedded?.["wp:term"]?.flat() ?? [];
+  const searchable = plainText(
+    [
+      post.title?.rendered,
+      post.excerpt?.rendered,
+      ...terms.map((term) => term.name),
+    ].join(" "),
+  ).toLocaleLowerCase("pt-BR");
+  return TECHNOLOGY_TERMS.some((term) => searchable.includes(term));
+}
+
 export async function getPaulistaNews(): Promise<NewsItem[]> {
   try {
     const response = await fetch(PAULISTA_NEWS_API, {
@@ -94,7 +123,9 @@ export async function getPaulistaNews(): Promise<NewsItem[]> {
     const posts = (await response.json()) as WordpressPost[];
 
     return posts.flatMap((post) => {
-      if (!post.id || !isOfficialUrl(post.link)) return [];
+      if (!post.id || !isOfficialUrl(post.link) || !isTechnologyNews(post)) {
+        return [];
+      }
 
       const terms = post._embedded?.["wp:term"]?.flat() ?? [];
       const category =
@@ -112,7 +143,7 @@ export async function getPaulistaNews(): Promise<NewsItem[]> {
           imageUrl: isOfficialUrl(imageUrl) ? imageUrl : undefined,
         },
       ];
-    });
+    }).slice(0, 9);
   } catch {
     return [];
   }

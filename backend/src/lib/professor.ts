@@ -56,6 +56,7 @@ export type ProfessorAluno = {
   temaId: string;
   usuarioId: string;
   nomeCompleto: string;
+  nomeResponsavel: string;
   email: string;
   telefone: string;
   cpf: string;
@@ -69,6 +70,7 @@ export type ProfessorAluno = {
 
 export type CreateAlunoInput = {
   nomeCompleto: string;
+  nomeResponsavel: string;
   email: string;
   telefone: string;
   cpf: string;
@@ -584,6 +586,7 @@ export async function listAlunos(temaId: string) {
     tema_id: number;
     usuario_id: number;
     nome_completo: string;
+    nome_responsavel: string;
     email: string;
     telefone: string;
     cpf: string;
@@ -592,7 +595,7 @@ export async function listAlunos(temaId: string) {
     qr_code_hash: string;
     created_at: Date;
   }>(
-    `SELECT a.id, a.tema_id, a.usuario_id, a.nome_completo,
+    `SELECT a.id, a.tema_id, a.usuario_id, a.nome_completo, a.nome_responsavel,
             u.email, u.telefone, u.cpf, u.data_nascimento, u.foto,
             u.qr_code_hash, a.created_at
      FROM professor_tema_alunos a
@@ -613,6 +616,7 @@ export async function listAlunos(temaId: string) {
       temaId: toId(row.tema_id),
       usuarioId: toId(row.usuario_id),
       nomeCompleto: row.nome_completo,
+      nomeResponsavel: row.nome_responsavel,
       email: row.email,
       telefone: row.telefone,
       cpf: row.cpf,
@@ -665,6 +669,7 @@ export async function createAluno(
   }
 
   const nomeCompleto = input.nomeCompleto.trim();
+  const nomeResponsavel = input.nomeResponsavel.trim();
   const email = input.email.trim().toLowerCase();
   const telefone = onlyDigits(input.telefone);
   const cpf = onlyDigits(input.cpf);
@@ -672,6 +677,13 @@ export async function createAluno(
 
   if (nomeCompleto.length < 2) {
     return { ok: false as const, status: 400, error: "Informe o nome completo." };
+  }
+  if (nomeResponsavel.length < 2) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "Informe o nome completo do responsável.",
+    };
   }
   if (!isEmail(email)) {
     return { ok: false as const, status: 400, error: "Informe um e-mail válido." };
@@ -701,6 +713,13 @@ export async function createAluno(
       ok: false as const,
       status: 400,
       error: "Aceite o aviso de privacidade para continuar.",
+    };
+  }
+  if (!input.fotoBuffer || input.fotoBuffer.byteLength < 1) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "A foto da criança é obrigatória.",
     };
   }
   if (birth.age < 18 && !input.guardianConsent) {
@@ -770,9 +789,10 @@ export async function createAluno(
 
       const link = await clientExecute(
         client,
-        `INSERT INTO professor_tema_alunos (tema_id, usuario_id, nome_completo)
-         VALUES ($1, $2, $3)`,
-        [temaId, id, nomeCompleto],
+        `INSERT INTO professor_tema_alunos
+          (tema_id, usuario_id, nome_completo, nome_responsavel)
+         VALUES ($1, $2, $3, $4)`,
+        [temaId, id, nomeCompleto, nomeResponsavel],
       );
       return { userId: toId(id), alunoRowId: toId(link.insertId) };
     });

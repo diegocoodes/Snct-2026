@@ -9,11 +9,12 @@ import {
   Eye,
   EyeOff,
   FolderKanban,
-  Gift,
+  FilePlus2,
   LayoutGrid,
   LoaderCircle,
   Megaphone,
   PencilLine,
+  Palette,
   Plus,
   Save,
   ScanLine,
@@ -27,6 +28,7 @@ import { toast } from "sonner";
 
 import { AdminEditaisPanel } from "@/components/dashboard/admin-editais-panel";
 import { AdminEstandesPanel } from "@/components/dashboard/admin-estandes-panel";
+import { AdminGameFormsPanel } from "@/components/dashboard/admin-game-forms-panel";
 import {
   AdminListPagination,
   AdminListSearch,
@@ -92,8 +94,14 @@ function AdminDashboard({
 }: AdminDashboardProps) {
   const router = useRouter();
   const [busyAction, setBusyAction] = useState("");
-  const partnerFilter = useCallback(filterPartner, []);
-  const auditFilter = useCallback(filterAuditLog, []);
+  const partnerFilter = useCallback(
+    (partner: ManagedPartner, query: string) => filterPartner(partner, query),
+    [],
+  );
+  const auditFilter = useCallback(
+    (log: AuditLog, query: string) => filterAuditLog(log, query),
+    [],
+  );
   const partnersList = useFilteredPagination({
     items: partners,
     filterFn: partnerFilter,
@@ -137,7 +145,6 @@ function AdminDashboard({
   );
   const staff = users.filter((user) => user.role === "staff");
   const checkins = visitors.filter((user) => user.checkedInAt).length;
-  const gifts = visitors.filter((user) => user.giftDeliveredAt).length;
 
   return (
     <div>
@@ -154,7 +161,7 @@ function AdminDashboard({
         </p>
       </div>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid gap-3 sm:grid-cols-3">
         {[
           {
             label: "Visitantes",
@@ -173,12 +180,6 @@ function AdminDashboard({
             value: checkins,
             icon: ScanLine,
             color: "text-emerald-300 bg-emerald-400/10",
-          },
-          {
-            label: "Brindes",
-            value: gifts,
-            icon: Gift,
-            color: "text-[#FF9AE8] bg-magenta-neon/10",
           },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label} size="sm">
@@ -224,6 +225,9 @@ function AdminDashboard({
           </TabsTrigger>
           <TabsTrigger value="projetos">
             <FolderKanban aria-hidden /> Projetos
+          </TabsTrigger>
+          <TabsTrigger value="forms">
+            <FilePlus2 aria-hidden /> Formulários
           </TabsTrigger>
           <TabsTrigger value="audit">
             <ScrollText aria-hidden /> Auditoria
@@ -285,6 +289,69 @@ function AdminDashboard({
                   className="max-h-48 max-w-full object-contain"
                 />
               </div>
+            </CardContent>
+          </Card>
+          <Card className="mt-5 border-cyan-electric/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="size-5 text-cyan-electric" aria-hidden />
+                Paleta global do sistema
+              </CardTitle>
+              <p className="text-sm leading-6 text-blue-gray">
+                Personalize as cores do portal e dos painéis sem editar código.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void mutate(
+                    {
+                      action: "updatePalette",
+                      ...formValues(event.currentTarget),
+                    },
+                    "Paleta atualizada em todo o sistema.",
+                  );
+                }}
+              >
+                {[
+                  ["background", "Fundo", settings.palette.background],
+                  ["surface", "Superfícies", settings.palette.surface],
+                  ["primary", "Primária", settings.palette.primary],
+                  ["secondary", "Secundária", settings.palette.secondary],
+                  ["accent", "Destaque", settings.palette.accent],
+                  ["text", "Texto principal", settings.palette.text],
+                ].map(([name, label, value]) => (
+                  <div key={name} className="space-y-2">
+                    <Label htmlFor={`palette-${name}`}>{label}</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id={`palette-${name}`}
+                        name={name}
+                        type="color"
+                        defaultValue={value}
+                        className="w-16 cursor-pointer p-1"
+                      />
+                      <Input
+                        value={value}
+                        readOnly
+                        aria-label={`${label} em hexadecimal`}
+                        className="font-mono"
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <Button
+                    type="submit"
+                    variant="glow"
+                    disabled={busyAction.startsWith("updatePalette")}
+                  >
+                    <Save aria-hidden /> Aplicar paleta
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
@@ -605,6 +672,10 @@ function AdminDashboard({
 
         <TabsContent value="projetos" className="pt-7">
           <AdminProjetosPanel />
+        </TabsContent>
+
+        <TabsContent value="forms" className="pt-7">
+          <AdminGameFormsPanel />
         </TabsContent>
 
         <TabsContent value="audit" className="pt-7">

@@ -4,91 +4,164 @@ import { prisma } from "@/lib/prisma";
 
 export const AVALIACAO_CRITERIOS = [
   {
-    key: "c11Organizacao",
-    codigo: "1.1",
-    secao: "Apresentação do trabalho",
-    label: "Organização (qualidade do estande e materiais)",
+    key: "cPerguntaObjetivos",
+    codigo: "1",
+    label: "Pergunta e objetivos",
+    descricao: "Clareza do problema e coerência dos objetivos",
+    maximo: 10,
   },
   {
-    key: "c12Estruturacao",
-    codigo: "1.2",
-    secao: "Apresentação do trabalho",
-    label: "Estruturação (Introdução, Desenvolvimento, Conclusão)",
+    key: "cProcessoInvestigativo",
+    codigo: "2",
+    label: "Processo investigativo",
+    descricao:
+      "Observação, teste, pesquisa, registros e adequação do método à idade",
+    maximo: 20,
   },
   {
-    key: "c13RelevanciaTema",
-    codigo: "1.3",
-    secao: "Apresentação do trabalho",
-    label: "Relevância do Tema",
+    key: "cAutoriaProtagonismo",
+    codigo: "3",
+    label: "Autoria e protagonismo",
+    descricao: "Participação real dos estudantes e domínio do que foi realizado",
+    maximo: 20,
   },
   {
-    key: "c14ImpactoProjeto",
-    codigo: "1.4",
-    secao: "Apresentação do trabalho",
-    label: "Impacto do Projeto",
+    key: "cEvidenciasAprendizagem",
+    codigo: "4",
+    label: "Evidências e aprendizagem",
+    descricao:
+      "Uso de dados, registros, resultados e reconhecimento de limites",
+    maximo: 15,
   },
   {
-    key: "c21Comunicacao",
-    codigo: "2.1",
-    secao: "Apresentação oral",
-    label: "Capacidade de Comunicação científica",
+    key: "cCriatividadeInovacao",
+    codigo: "5",
+    label: "Criatividade e inovação",
+    descricao: "Originalidade da abordagem ou adaptação ao contexto",
+    maximo: 10,
   },
   {
-    key: "c22RespostaPerguntas",
-    codigo: "2.2",
-    secao: "Apresentação oral",
-    label: "Capacidade de responder perguntas do avaliador",
+    key: "cImpactoResponsabilidade",
+    codigo: "6",
+    label: "Impacto e responsabilidade",
+    descricao:
+      "Relevância para escola/comunidade, segurança, ética e sustentabilidade",
+    maximo: 10,
   },
   {
-    key: "c31Fundamentacao",
-    codigo: "3.1",
-    secao: "Desenvolvimento do trabalho",
-    label: "Fundamentação Científica",
+    key: "cComunicacaoCientifica",
+    codigo: "7",
+    label: "Comunicação científica",
+    descricao:
+      "Clareza, escuta, organização do estande e qualidade do banner",
+    maximo: 10,
   },
   {
-    key: "c32Metodo",
-    codigo: "3.2",
-    secao: "Desenvolvimento do trabalho",
-    label: "Adequação do método utilizado",
+    key: "cIntegracaoCienciaDelas",
+    codigo: "8",
+    label: "Integração ao tema Ciência Delas",
+    descricao:
+      "Vínculo consistente com mulheres, meninas e equidade na ciência",
+    maximo: 5,
+  },
+] as const;
+
+export const AVALIACAO_TOTAL_MAXIMO = AVALIACAO_CRITERIOS.reduce(
+  (sum, item) => sum + item.maximo,
+  0,
+);
+
+export const ESCALA_DESEMPENHO = [
+  {
+    nivel: "Excelente",
+    faixa: "90% a 100% do item",
+    referencia:
+      "Evidência clara, consistente e autônoma, adequada à faixa etária.",
   },
   {
-    key: "c35Originalidade",
-    codigo: "3.5",
-    secao: "Desenvolvimento do trabalho",
-    label: "Originalidade e Inovação",
+    nivel: "Bom",
+    faixa: "70% a 89%",
+    referencia:
+      "Evidência suficiente, com pequenas lacunas que não comprometem a compreensão.",
   },
   {
-    key: "c34Conclusao",
-    codigo: "3.4",
-    secao: "Desenvolvimento do trabalho",
-    label: "Conclusão coerente e de acordo com os resultados",
+    nivel: "Em desenvolvimento",
+    faixa: "40% a 69%",
+    referencia:
+      "Evidência parcial; a equipe demonstra aprendizagem, mas há lacunas relevantes.",
+  },
+  {
+    nivel: "Inicial",
+    faixa: "0% a 39%",
+    referencia:
+      "Evidência insuficiente, incoerente, não apresentada ou não atribuível aos estudantes.",
   },
 ] as const;
 
 export type CriterioKey = (typeof AVALIACAO_CRITERIOS)[number]["key"];
 
-export type NotasAvaliacao = Record<CriterioKey, number | null>;
+export type NotasAvaliacao = Record<CriterioKey, number>;
+
+const JA_AVALIADO_MSG = "Você já realizou a avaliação deste stand.";
 
 function toId(value: number | bigint | string) {
   return String(value);
 }
 
-function parseNota(value: unknown): number | null {
-  if (value === null || value === undefined || value === "" || value === "N/A") {
-    return null;
+function parseNota(value: unknown, maximo: number, label: string): number {
+  if (value === null || value === undefined || value === "") {
+    throw new Error(`Informe a nota de "${label}" (0 a ${maximo}).`);
   }
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isInteger(n) || n < 1 || n > 5) {
-    throw new Error("Cada nota deve ser 1 a 5 ou N/A.");
+  if (!Number.isInteger(n) || n < 0 || n > maximo) {
+    throw new Error(`A nota de "${label}" deve ser um inteiro de 0 a ${maximo}.`);
   }
   return n;
 }
 
+function mapAvaliacaoRow(row: {
+  id: bigint;
+  standId: bigint;
+  projetoId: bigint;
+  tentativa: number;
+  cPerguntaObjetivos: number;
+  cProcessoInvestigativo: number;
+  cAutoriaProtagonismo: number;
+  cEvidenciasAprendizagem: number;
+  cCriatividadeInovacao: number;
+  cImpactoResponsabilidade: number;
+  cComunicacaoCientifica: number;
+  cIntegracaoCienciaDelas: number;
+  total: number;
+  observacoes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: toId(row.id),
+    standId: toId(row.standId),
+    projetoId: toId(row.projetoId),
+    tentativa: row.tentativa,
+    status: "CONCLUIDA" as const,
+    notas: {
+      cPerguntaObjetivos: row.cPerguntaObjetivos,
+      cProcessoInvestigativo: row.cProcessoInvestigativo,
+      cAutoriaProtagonismo: row.cAutoriaProtagonismo,
+      cEvidenciasAprendizagem: row.cEvidenciasAprendizagem,
+      cCriatividadeInovacao: row.cCriatividadeInovacao,
+      cImpactoResponsabilidade: row.cImpactoResponsabilidade,
+      cComunicacaoCientifica: row.cComunicacaoCientifica,
+      cIntegracaoCienciaDelas: row.cIntegracaoCienciaDelas,
+    } satisfies NotasAvaliacao,
+    total: row.total,
+    observacoes: row.observacoes,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 export function calcularTotal(notas: NotasAvaliacao) {
-  return AVALIACAO_CRITERIOS.reduce((sum, item) => {
-    const nota = notas[item.key];
-    return sum + (typeof nota === "number" ? nota : 0);
-  }, 0);
+  return AVALIACAO_CRITERIOS.reduce((sum, item) => sum + notas[item.key], 0);
 }
 
 export async function getStandParaAvaliacao(qrCodeHash: string) {
@@ -164,40 +237,293 @@ export async function getStandParaAvaliacao(qrCodeHash: string) {
   };
 }
 
+export async function getAvaliacaoDoAvaliadorPorStand(
+  avaliadorUsuarioId: string,
+  standId: string,
+) {
+  const row = await prisma.avaliacao.findUnique({
+    where: {
+      avaliadorUsuarioId_standId: {
+        avaliadorUsuarioId: BigInt(avaliadorUsuarioId),
+        standId: BigInt(standId),
+      },
+    },
+  });
+  return row ? mapAvaliacaoRow(row) : null;
+}
+
+/** @deprecated Prefer getAvaliacaoDoAvaliadorPorStand */
 export async function getAvaliacaoDoAvaliador(
   avaliadorUsuarioId: string,
   projetoId: string,
 ) {
-  const row = await prisma.avaliacao.findUnique({
+  const row = await prisma.avaliacao.findFirst({
     where: {
-      avaliadorUsuarioId_projetoId: {
-        avaliadorUsuarioId: BigInt(avaliadorUsuarioId),
-        projetoId: BigInt(projetoId),
+      avaliadorUsuarioId: BigInt(avaliadorUsuarioId),
+      projetoId: BigInt(projetoId),
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return row ? mapAvaliacaoRow(row) : null;
+}
+
+export async function listAvaliacoesDoAvaliador(avaliadorUsuarioId: string) {
+  const rows = await prisma.avaliacao.findMany({
+    where: { avaliadorUsuarioId: BigInt(avaliadorUsuarioId) },
+    include: {
+      stand: {
+        select: { id: true, codigo: true, nome: true },
+      },
+      projeto: {
+        select: { id: true, titulo: true, area: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return rows.map((row) => ({
+    id: toId(row.id),
+    standId: toId(row.standId),
+    standCodigo: row.stand.codigo,
+    standNome: row.stand.nome || row.stand.codigo,
+    projetoId: toId(row.projetoId),
+    projetoTitulo: row.projeto.titulo,
+    projetoTema: row.projeto.area,
+    total: row.total,
+    status: "CONCLUIDA" as const,
+    statusLabel: "Concluída",
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+}
+
+/** Minutos de exclusividade da reserva do stand. */
+export function getReservaMinutos() {
+  const value = Number(process.env.SNCT_AVALIACAO_RESERVA_MINUTOS ?? 25);
+  return Number.isFinite(value) && value > 0 ? value : 25;
+}
+
+/** Limite máximo de avaliações por stand (organização). */
+export function getMaxAvaliacoesPorStand() {
+  const value = Number(process.env.SNCT_MAX_AVALIACOES_POR_STAND ?? 3);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 3;
+}
+
+async function limparReservasExpiradas(now = new Date()) {
+  await prisma.avaliadorStandSorteio.deleteMany({
+    where: { expiresAt: { lte: now } },
+  });
+}
+
+export async function getReservaAtivaDoStand(standId: string) {
+  await limparReservasExpiradas();
+  const row = await prisma.avaliadorStandSorteio.findUnique({
+    where: { standId: BigInt(standId) },
+  });
+  if (!row) return null;
+  if (row.expiresAt.getTime() <= Date.now()) {
+    await prisma.avaliadorStandSorteio
+      .delete({ where: { id: row.id } })
+      .catch(() => undefined);
+    return null;
+  }
+  return {
+    standId: toId(row.standId),
+    avaliadorUsuarioId: toId(row.avaliadorUsuarioId),
+    expiresAt: row.expiresAt.toISOString(),
+  };
+}
+
+async function liberarReservaDoStand(standId: bigint | string) {
+  await prisma.avaliadorStandSorteio
+    .deleteMany({ where: { standId: BigInt(standId) } })
+    .catch(() => undefined);
+}
+
+/**
+ * Algoritmo de seleção do próximo stand:
+ * aptos = não avaliados pelo avaliador + sem reserva de outro +
+ * abaixo do limite + ativos com projeto aprovado.
+ * Prioriza o menor número de avaliações; empate = aleatório.
+ * Reserva exclusiva por até 25 minutos.
+ */
+export async function selecionarProximoStand(
+  avaliadorUsuarioId: string,
+  tentativa = 0,
+) {
+  if (tentativa > 5) return null;
+
+  const avaliadorId = BigInt(avaliadorUsuarioId);
+  const agora = new Date();
+  const reservaMinutos = getReservaMinutos();
+  const maxAvaliacoes = getMaxAvaliacoesPorStand();
+  const expiresAt = new Date(agora.getTime() + reservaMinutos * 60_000);
+
+  await limparReservasExpiradas(agora);
+
+  const reservaAtual = await prisma.avaliadorStandSorteio.findFirst({
+    where: {
+      avaliadorUsuarioId: avaliadorId,
+      expiresAt: { gt: agora },
+    },
+    include: {
+      stand: {
+        include: {
+          projeto: {
+            select: {
+              titulo: true,
+              status: true,
+              escola: {
+                select: {
+                  nome: true,
+                  professor: { select: { nomeCompleto: true } },
+                },
+              },
+            },
+          },
+          _count: { select: { avaliacoes: true } },
+        },
       },
     },
   });
-  if (!row) return null;
+
+  if (reservaAtual) {
+    const jaAvaliou = await prisma.avaliacao.findUnique({
+      where: {
+        avaliadorUsuarioId_standId: {
+          avaliadorUsuarioId: avaliadorId,
+          standId: reservaAtual.standId,
+        },
+      },
+      select: { id: true },
+    });
+    const stand = reservaAtual.stand;
+    const aindaApto =
+      !jaAvaliou &&
+      stand.status !== "INATIVO" &&
+      stand.projeto?.status === "APROVADO" &&
+      stand._count.avaliacoes < maxAvaliacoes;
+
+    if (aindaApto) {
+      return {
+        id: toId(stand.id),
+        codigo: stand.codigo,
+        nome: stand.nome,
+        projetoTitulo: stand.projeto?.titulo ?? null,
+        escolaNome: stand.projeto?.escola.nome ?? null,
+        professorNome: stand.projeto?.escola.professor.nomeCompleto ?? null,
+        totalAvaliacoes: stand._count.avaliacoes,
+        qrCodeHash: stand.qrCodeHash,
+        reservaExpiraEm: reservaAtual.expiresAt.toISOString(),
+        reservaMinutos,
+        maxAvaliacoesPorStand: maxAvaliacoes,
+        reutilizada: true,
+      };
+    }
+
+    await liberarReservaDoStand(reservaAtual.standId);
+  }
+
+  const jaAvaliados = await prisma.avaliacao.findMany({
+    where: { avaliadorUsuarioId: avaliadorId },
+    select: { standId: true },
+  });
+  const excluidos = new Set(jaAvaliados.map((item) => toId(item.standId)));
+
+  const reservasAtivas = await prisma.avaliadorStandSorteio.findMany({
+    where: { expiresAt: { gt: agora } },
+    select: { standId: true, avaliadorUsuarioId: true },
+  });
+  for (const reserva of reservasAtivas) {
+    if (toId(reserva.avaliadorUsuarioId) !== avaliadorUsuarioId) {
+      excluidos.add(toId(reserva.standId));
+    }
+  }
+
+  const candidatos = await prisma.stand.findMany({
+    where: {
+      status: { not: "INATIVO" },
+      projeto: { is: { status: "APROVADO" } },
+      ...(excluidos.size
+        ? { id: { notIn: [...excluidos].map((id) => BigInt(id)) } }
+        : {}),
+    },
+    include: {
+      _count: { select: { avaliacoes: true } },
+      projeto: {
+        select: {
+          titulo: true,
+          escola: {
+            select: {
+              nome: true,
+              professor: { select: { nomeCompleto: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const aptos = candidatos.filter(
+    (item) => item._count.avaliacoes < maxAvaliacoes,
+  );
+  if (!aptos.length) return null;
+
+  const menorCarga = Math.min(...aptos.map((item) => item._count.avaliacoes));
+  const equilibrados = aptos.filter(
+    (item) => item._count.avaliacoes === menorCarga,
+  );
+  const stand = equilibrados[Math.floor(Math.random() * equilibrados.length)];
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.avaliadorStandSorteio.deleteMany({
+        where: {
+          OR: [
+            { expiresAt: { lte: agora } },
+            { avaliadorUsuarioId: avaliadorId },
+            { standId: stand.id },
+          ],
+        },
+      });
+      await tx.avaliadorStandSorteio.create({
+        data: {
+          avaliadorUsuarioId: avaliadorId,
+          standId: stand.id,
+          expiresAt,
+        },
+      });
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      // Concorrência: outro avaliador reservou no mesmo instante.
+      return selecionarProximoStand(avaliadorUsuarioId, tentativa + 1);
+    }
+    throw error;
+  }
+
   return {
-    id: toId(row.id),
-    standId: toId(row.standId),
-    projetoId: toId(row.projetoId),
-    notas: {
-      c11Organizacao: row.c11Organizacao,
-      c12Estruturacao: row.c12Estruturacao,
-      c13RelevanciaTema: row.c13RelevanciaTema,
-      c14ImpactoProjeto: row.c14ImpactoProjeto,
-      c21Comunicacao: row.c21Comunicacao,
-      c22RespostaPerguntas: row.c22RespostaPerguntas,
-      c31Fundamentacao: row.c31Fundamentacao,
-      c32Metodo: row.c32Metodo,
-      c35Originalidade: row.c35Originalidade,
-      c34Conclusao: row.c34Conclusao,
-    } satisfies NotasAvaliacao,
-    total: row.total,
-    observacoes: row.observacoes,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    id: toId(stand.id),
+    codigo: stand.codigo,
+    nome: stand.nome,
+    projetoTitulo: stand.projeto?.titulo ?? null,
+    escolaNome: stand.projeto?.escola.nome ?? null,
+    professorNome: stand.projeto?.escola.professor.nomeCompleto ?? null,
+    totalAvaliacoes: stand._count.avaliacoes,
+    qrCodeHash: stand.qrCodeHash,
+    reservaExpiraEm: expiresAt.toISOString(),
+    reservaMinutos,
+    maxAvaliacoesPorStand: maxAvaliacoes,
+    reutilizada: false,
   };
+}
+
+/** @deprecated Use selecionarProximoStand */
+export async function sortearStandParaAvaliador(avaliadorUsuarioId: string) {
+  return selecionarProximoStand(avaliadorUsuarioId);
 }
 
 export async function salvarAvaliacao(input: {
@@ -209,18 +535,15 @@ export async function salvarAvaliacao(input: {
 }) {
   let notas: NotasAvaliacao;
   try {
-    notas = {
-      c11Organizacao: parseNota(input.notas.c11Organizacao),
-      c12Estruturacao: parseNota(input.notas.c12Estruturacao),
-      c13RelevanciaTema: parseNota(input.notas.c13RelevanciaTema),
-      c14ImpactoProjeto: parseNota(input.notas.c14ImpactoProjeto),
-      c21Comunicacao: parseNota(input.notas.c21Comunicacao),
-      c22RespostaPerguntas: parseNota(input.notas.c22RespostaPerguntas),
-      c31Fundamentacao: parseNota(input.notas.c31Fundamentacao),
-      c32Metodo: parseNota(input.notas.c32Metodo),
-      c35Originalidade: parseNota(input.notas.c35Originalidade),
-      c34Conclusao: parseNota(input.notas.c34Conclusao),
-    };
+    const parsed = {} as NotasAvaliacao;
+    for (const criterio of AVALIACAO_CRITERIOS) {
+      parsed[criterio.key] = parseNota(
+        input.notas[criterio.key],
+        criterio.maximo,
+        criterio.label,
+      );
+    }
+    notas = parsed;
   } catch (error) {
     return {
       ok: false as const,
@@ -231,13 +554,23 @@ export async function salvarAvaliacao(input: {
 
   const stand = await prisma.stand.findUnique({
     where: { id: BigInt(input.standId) },
-    include: { projeto: true },
+    include: {
+      projeto: true,
+      _count: { select: { avaliacoes: true } },
+    },
   });
   if (!stand || !stand.projeto) {
     return {
       ok: false as const,
       status: 404,
       error: "Stand ou projeto não encontrado.",
+    };
+  }
+  if (stand.status === "INATIVO") {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "Este stand não está disponível para avaliação.",
     };
   }
   if (toId(stand.projeto.id) !== input.projetoId) {
@@ -255,37 +588,73 @@ export async function salvarAvaliacao(input: {
     };
   }
 
+  const maxAvaliacoes = getMaxAvaliacoesPorStand();
+  if (stand._count.avaliacoes >= maxAvaliacoes) {
+    return {
+      ok: false as const,
+      status: 409,
+      error: `Este stand já atingiu o limite de ${maxAvaliacoes} avaliações.`,
+    };
+  }
+
+  const reserva = await getReservaAtivaDoStand(input.standId);
+  if (
+    reserva &&
+    reserva.avaliadorUsuarioId !== input.avaliadorUsuarioId
+  ) {
+    return {
+      ok: false as const,
+      status: 409,
+      error: "Este stand está reservado para outro avaliador.",
+    };
+  }
+
+  const existente = await prisma.avaliacao.findUnique({
+    where: {
+      avaliadorUsuarioId_standId: {
+        avaliadorUsuarioId: BigInt(input.avaliadorUsuarioId),
+        standId: BigInt(input.standId),
+      },
+    },
+  });
+  if (existente) {
+    return {
+      ok: false as const,
+      status: 409,
+      error: JA_AVALIADO_MSG,
+    };
+  }
+
   const total = calcularTotal(notas);
   const observacoes = input.observacoes?.trim().slice(0, 4000) || null;
 
   try {
-    const saved = await prisma.avaliacao.upsert({
-      where: {
-        avaliadorUsuarioId_projetoId: {
-          avaliadorUsuarioId: BigInt(input.avaliadorUsuarioId),
+    const saved = await prisma.$transaction(async (tx) => {
+      const created = await tx.avaliacao.create({
+        data: {
+          standId: BigInt(input.standId),
           projetoId: BigInt(input.projetoId),
+          avaliadorUsuarioId: BigInt(input.avaliadorUsuarioId),
+          tentativa: 1,
+          ...notas,
+          total,
+          observacoes,
         },
-      },
-      create: {
-        standId: BigInt(input.standId),
-        projetoId: BigInt(input.projetoId),
-        avaliadorUsuarioId: BigInt(input.avaliadorUsuarioId),
-        ...notas,
-        total,
-        observacoes,
-      },
-      update: {
-        ...notas,
-        total,
-        observacoes,
-      },
+      });
+      await tx.avaliadorStandSorteio.deleteMany({
+        where: { standId: BigInt(input.standId) },
+      });
+      return created;
     });
 
     return {
       ok: true as const,
       avaliacao: {
         id: toId(saved.id),
+        tentativa: saved.tentativa,
         total: saved.total,
+        status: "CONCLUIDA" as const,
+        createdAt: saved.createdAt.toISOString(),
         updatedAt: saved.updatedAt.toISOString(),
       },
     };
@@ -297,9 +666,11 @@ export async function salvarAvaliacao(input: {
       return {
         ok: false as const,
         status: 409,
-        error: "Já existe uma avaliação deste avaliador para o projeto.",
+        error: JA_AVALIADO_MSG,
       };
     }
     throw error;
   }
 }
+
+export { JA_AVALIADO_MSG };

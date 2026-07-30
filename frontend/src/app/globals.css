@@ -5,12 +5,18 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --color-purple-deep: #10002b;
-  --color-purple-dark: #18003d;
-  --color-purple-vibrant: #6a00ff;
-  --color-magenta-neon: #ff2ed1;
-  --color-cyan-electric: #00e5ff;
-  --color-ice-white: #f5f7ff;
+  --palette-purple-deep: #10002b;
+  --palette-purple-dark: #18003d;
+  --palette-purple-vibrant: #6a00ff;
+  --palette-magenta-neon: #ff2ed1;
+  --palette-cyan-electric: #00e5ff;
+  --palette-ice-white: #f5f7ff;
+  --color-purple-deep: var(--palette-purple-deep);
+  --color-purple-dark: var(--palette-purple-dark);
+  --color-purple-vibrant: var(--palette-purple-vibrant);
+  --color-magenta-neon: var(--palette-magenta-neon);
+  --color-cyan-electric: var(--palette-cyan-electric);
+  --color-ice-white: var(--palette-ice-white);
   --color-blue-gray: #aab4d4;
   --color-background-secondary: #120024;
   --color-surface-dark: #1b0638;
@@ -82,12 +88,12 @@
 }
 
 @theme inline {
-  --color-purple-deep: #10002b;
-  --color-purple-dark: #18003d;
-  --color-purple-vibrant: #6a00ff;
-  --color-magenta-neon: #ff2ed1;
-  --color-cyan-electric: #00e5ff;
-  --color-ice-white: #f5f7ff;
+  --color-purple-deep: var(--palette-purple-deep);
+  --color-purple-dark: var(--palette-purple-dark);
+  --color-purple-vibrant: var(--palette-purple-vibrant);
+  --color-magenta-neon: var(--palette-magenta-neon);
+  --color-cyan-electric: var(--palette-cyan-electric);
+  --color-ice-white: var(--palette-ice-white);
   --color-blue-gray: #aab4d4;
   --color-surface-dark: #1b0638;
   --color-background: var(--background);

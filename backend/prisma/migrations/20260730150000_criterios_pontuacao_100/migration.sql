@@ -1,0 +1,20 @@
+-- Critérios de pontuação do edital (total 100).
+ALTER TABLE `avaliacoes`
+  DROP COLUMN `c11_organizacao`,
+  DROP COLUMN `c12_estruturacao`,
+  DROP COLUMN `c13_relevancia_tema`,
+  DROP COLUMN `c14_impacto_projeto`,
+  DROP COLUMN `c21_comunicacao`,
+  DROP COLUMN `c22_resposta_perguntas`,
+  DROP COLUMN `c31_fundamentacao`,
+  DROP COLUMN `c32_metodo`,
+  DROP COLUMN `c35_originalidade`,
+  DROP COLUMN `c34_conclusao`,
+  ADD COLUMN `c_pergunta_objetivos` INT NOT NULL DEFAULT 0 AFTER `tentativa`,
+  ADD COLUMN `c_processo_investigativo` INT NOT NULL DEFAULT 0 AFTER `c_pergunta_objetivos`,
+  ADD COLUMN `c_autoria_protagonismo` INT NOT NULL DEFAULT 0 AFTER `c_processo_investigativo`,
+  ADD COLUMN `c_evidencias_aprendizagem` INT NOT NULL DEFAULT 0 AFTER `c_autoria_protagonismo`,
+  ADD COLUMN `c_criatividade_inovacao` INT NOT NULL DEFAULT 0 AFTER `c_evidencias_aprendizagem`,
+  ADD COLUMN `c_impacto_responsabilidade` INT NOT NULL DEFAULT 0 AFTER `c_criatividade_inovacao`,
+  ADD COLUMN `c_comunicacao_cientifica` INT NOT NULL DEFAULT 0 AFTER `c_impacto_responsabilidade`,
+  ADD COLUMN `c_integracao_ciencia_delas` INT NOT NULL DEFAULT 0 AFTER `c_comunicacao_cientifica`;

@@ -70,6 +70,7 @@ type ProfessorAluno = {
   temaId: string;
   usuarioId: string;
   nomeCompleto: string;
+  nomeResponsavel: string;
   email: string;
   telefone: string;
   cpf: string;
@@ -281,8 +282,9 @@ function ProfessorPanel() {
         setError(data?.error ?? "Não foi possível abrir a escola.");
         return false;
       }
-      applyPanel(data);
-      return true;
+      const normalized = normalizePanel(data);
+      applyPanel(normalized);
+      return normalized;
     } catch {
       setError("Falha de rede. Tente novamente.");
       return false;
@@ -448,6 +450,26 @@ function ProfessorPanel() {
     setMessage("");
   }
 
+  async function openAlunosDaEscola(escolaId: string) {
+    const escolaPanel = await loadEscolaPanel(escolaId);
+    if (!escolaPanel) return;
+
+    if (escolaPanel.temas.length === 1) {
+      setSelectedTemaId(escolaPanel.temas[0].id);
+      setStep("inscritos");
+      setMessage("");
+      return;
+    }
+
+    setSelectedTemaId(null);
+    setStep("temas");
+    setMessage(
+      escolaPanel.temas.length > 1
+        ? "Escolha um projeto para visualizar os alunos cadastrados."
+        : "Cadastre um projeto para adicionar e visualizar alunos.",
+    );
+  }
+
   async function onCreateAluno(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTema) return;
@@ -491,6 +513,10 @@ function ProfessorPanel() {
     payload.set("action", "createAluno");
     payload.set("temaId", selectedTema.id);
     payload.set("nomeCompleto", String(form.get("nomeCompleto") ?? "").trim());
+    payload.set(
+      "nomeResponsavel",
+      String(form.get("nomeResponsavel") ?? "").trim(),
+    );
     payload.set("email", String(form.get("email") ?? "").trim().toLowerCase());
     payload.set("telefone", onlyDigits(String(form.get("telefone") ?? "")));
     payload.set("cpf", onlyDigits(String(form.get("cpf") ?? "")));
@@ -803,6 +829,16 @@ function ProfessorPanel() {
                         </span>
                       </span>
                     </button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void openAlunosDaEscola(escola.id)}
+                    >
+                      <Users className="size-4" aria-hidden />
+                      Visualizar alunos cadastrados
+                    </Button>
                     {!locked ? (
                       <div className="flex shrink-0 gap-1">
                         <Button
@@ -1078,6 +1114,23 @@ function ProfessorPanel() {
               />
             </div>
 
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="aluno-responsavel">
+                Nome completo do responsável
+              </Label>
+              <Input
+                id="aluno-responsavel"
+                name="nomeResponsavel"
+                autoComplete="name"
+                minLength={2}
+                required
+              />
+              <p className="text-xs text-blue-gray">
+                A criança ficará vinculada a você como professor responsável
+                pelo projeto.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="aluno-email">E-mail</Label>
               <Input
@@ -1117,12 +1170,13 @@ function ProfessorPanel() {
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="aluno-foto">Foto (opcional)</Label>
+              <Label htmlFor="aluno-foto">Foto da criança</Label>
               <Input
                 id="aluno-foto"
                 name="foto"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
+                required
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (!file) {
@@ -1283,6 +1337,9 @@ function ProfessorPanel() {
                     </p>
                     <p className="mt-0.5 text-xs text-blue-gray">
                       CPF {formatCpf(aluno.cpf)} · {aluno.age} anos
+                    </p>
+                    <p className="truncate text-xs text-blue-gray">
+                      Responsável: {aluno.nomeResponsavel}
                     </p>
                     <p className="truncate text-xs text-blue-gray">
                       {aluno.email}

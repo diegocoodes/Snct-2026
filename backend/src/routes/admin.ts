@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/prisma";
 
 import { requireRole } from "@/lib/auth";
 import { readAuditEvents, recordAuditEvent } from "@/lib/audit";
@@ -72,6 +73,10 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isHexColor(value: string) {
+  return /^#[0-9a-f]{6}$/i.test(value);
+}
+
 function isAllowedImageUrl(value: string) {
   if (value.startsWith("/")) return !value.startsWith("//");
   try {
@@ -111,6 +116,18 @@ export async function GET(request: Request) {
     return Response.json({ error: "Não autorizado." }, { status: 401 });
   }
   const url = new URL(request.url);
+  if (url.searchParams.get("resource") === "game-forms") {
+    const forms = await prisma.gameForm.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    return Response.json({
+      forms: forms.map((form) => ({
+        ...form,
+        createdAt: form.createdAt.toISOString(),
+        updatedAt: form.updatedAt.toISOString(),
+      })),
+    });
+  }
   const usuarioId = url.searchParams.get("usuarioId");
   if (usuarioId) {
     const [store, roleHistory, roles] = await Promise.all([
@@ -832,7 +849,7 @@ export async function PATCH(request: Request) {
         );
       }
       await updateSnctStore((store) => {
-        store.settings = { eventEdition, heroImageUrl };
+        store.settings = { ...store.settings, eventEdition, heroImageUrl };
       });
       await recordAuditEvent(request, {
         actorId: session.userId,
@@ -842,6 +859,114 @@ export async function PATCH(request: Request) {
         entityId: "1",
       });
       return Response.json({ settings: { eventEdition, heroImageUrl } });
+    }
+
+    if (action === "updatePalette") {
+      const palette = {
+        background: clean(body?.background, 7),
+        surface: clean(body?.surface, 7),
+        primary: clean(body?.primary, 7),
+        secondary: clean(body?.secondary, 7),
+        accent: clean(body?.accent, 7),
+        text: clean(body?.text, 7),
+      };
+      if (!Object.values(palette).every(isHexColor)) {
+        return Response.json(
+          { error: "Use cores válidas no formato hexadecimal #RRGGBB." },
+          { status: 400 },
+        );
+      }
+      await updateSnctStore((store) => {
+        store.settings = { ...store.settings, palette };
+      });
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "palette.update",
+        entity: "settings",
+        entityId: "1",
+        metadata: palette,
+      });
+      return Response.json({ palette });
+    }
+
+    if (action === "saveGameForm") {
+      const title = clean(body?.title, 180);
+      const slug = clean(body?.slug, 100)
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const description = clean(body?.description, 2000);
+      const fields = Array.isArray(body?.fields) ? body.fields.slice(0, 30) : [];
+      const normalizedFields = fields.flatMap((raw, index) => {
+        if (!raw || typeof raw !== "object") return [];
+        const field = raw as Record<string, unknown>;
+        const label = clean(field.label, 120);
+        const type = clean(field.type, 20);
+        if (
+          !label ||
+          !["text", "email", "number", "select", "textarea", "checkbox"].includes(
+            type,
+          )
+        ) {
+          return [];
+        }
+        return [
+          {
+            id: clean(field.id, 64) || `field-${index + 1}`,
+            label,
+            type,
+            required: Boolean(field.required),
+            options: Array.isArray(field.options)
+              ? field.options.map((item) => clean(item, 80)).filter(Boolean)
+              : [],
+          },
+        ];
+      });
+      if (!title || !slug || !normalizedFields.length) {
+        return Response.json(
+          { error: "Informe título, identificador e ao menos um campo válido." },
+          { status: 400 },
+        );
+      }
+      const id = clean(body?.id, 64) || `game-form-${randomUUID()}`;
+      const form = await prisma.gameForm.upsert({
+        where: { id },
+        create: {
+          id,
+          title,
+          slug,
+          description: description || null,
+          fields: normalizedFields,
+        },
+        update: {
+          title,
+          slug,
+          description: description || null,
+          fields: normalizedFields,
+        },
+      });
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "game_form.save",
+        entity: "game_form",
+        entityId: form.id,
+      });
+      return Response.json({ form });
+    }
+
+    if (action === "deleteGameForm") {
+      const id = clean(body?.id, 64);
+      await prisma.gameForm.delete({ where: { id } });
+      await recordAuditEvent(request, {
+        actorId: session.userId,
+        actorRole: session.role,
+        action: "game_form.delete",
+        entity: "game_form",
+        entityId: id,
+      });
+      return Response.json({ ok: true });
     }
 
     if (action === "createEstande") {

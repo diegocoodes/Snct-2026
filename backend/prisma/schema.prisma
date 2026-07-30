@@ -43,9 +43,10 @@ model Usuario {
   checkins           Checkin[]            @relation("CheckinParticipante")
   checkinsRealizados Checkin[]            @relation("CheckinOperador")
   sessoes            Sessao[]
-  escola             ProfessorEscola?
+  escolas            ProfessorEscola[]
   vinculoAluno       ProfessorTemaAluno?
   avaliacoes         Avaliacao[]
+  estandesReservados AvaliadorStandSorteio[]
   arenaTimesResponsavel ArenaTime[]       @relation("ArenaTimeResponsavel")
   arenaMembros       ArenaTimeMembro[]
 
@@ -161,6 +162,7 @@ model Stand {
 
   projeto     Projeto?
   avaliacoes Avaliacao[]
+  reservas   AvaliadorStandSorteio[]
 
   @@index([status], map: "estandes_status_idx")
   @@map("estandes")
@@ -208,6 +210,7 @@ model ProfessorTemaAluno {
   projetoId    BigInt   @map("tema_id")
   usuarioId    BigInt   @unique(map: "professor_tema_alunos_usuario_unique") @map("usuario_id")
   nomeCompleto String   @map("nome_completo") @db.VarChar(180)
+  nomeResponsavel String @map("nome_responsavel") @db.VarChar(180)
   createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
 
   projeto   Projeto                    @relation(fields: [projetoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "professor_tema_alunos_tema_fk")
@@ -306,6 +309,12 @@ model SnctSiteSettings {
   id              Int      @id @default(1) @db.SmallInt
   eventEdition    String   @map("event_edition") @db.VarChar(255)
   heroImageUrl    String   @map("hero_image_url") @db.VarChar(600)
+  colorBackground String   @default("#10002b") @map("color_background") @db.VarChar(7)
+  colorSurface    String   @default("#18003d") @map("color_surface") @db.VarChar(7)
+  colorPrimary    String   @default("#6a00ff") @map("color_primary") @db.VarChar(7)
+  colorSecondary  String   @default("#ff2ed1") @map("color_secondary") @db.VarChar(7)
+  colorAccent     String   @default("#00e5ff") @map("color_accent") @db.VarChar(7)
+  colorText       String   @default("#f5f7ff") @map("color_text") @db.VarChar(7)
   privacyVersion  String   @default("2026-07-20") @map("privacy_version") @db.VarChar(64)
   retentionMonths Int      @default(24) @map("retention_months")
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
@@ -313,36 +322,74 @@ model SnctSiteSettings {
   @@map("snct_site_settings")
 }
 
-/// Ficha de avaliação da feira (notas 1–5; null = N/A)
+model GameForm {
+  id          String   @id @db.VarChar(64)
+  title       String   @db.VarChar(180)
+  slug        String   @unique(map: "game_forms_slug_unique") @db.VarChar(100)
+  description String?  @db.Text
+  fields      Json
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  submissions GameFormSubmission[]
+
+  @@map("game_forms")
+}
+
+model GameFormSubmission {
+  id        String   @id @db.VarChar(64)
+  formId    String   @map("form_id") @db.VarChar(64)
+  answers   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  form GameForm @relation(fields: [formId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "game_form_submissions_form_fk")
+
+  @@index([formId, createdAt], map: "game_form_submissions_form_idx")
+  @@map("game_form_submissions")
+}
+
+/// Ficha de avaliação (critérios do edital — total até 100 pontos)
 model Avaliacao {
-  id                   BigInt   @id @default(autoincrement())
-  standId              BigInt   @map("stand_id")
-  projetoId            BigInt   @map("projeto_id")
-  avaliadorUsuarioId   BigInt   @map("avaliador_usuario_id")
-  // 1. Apresentação do trabalho
-  c11Organizacao       Int?     @map("c11_organizacao")
-  c12Estruturacao      Int?     @map("c12_estruturacao")
-  c13RelevanciaTema    Int?     @map("c13_relevancia_tema")
-  c14ImpactoProjeto    Int?     @map("c14_impacto_projeto")
-  // 2. Apresentação oral
-  c21Comunicacao       Int?     @map("c21_comunicacao")
-  c22RespostaPerguntas Int?     @map("c22_resposta_perguntas")
-  // 3. Desenvolvimento
-  c31Fundamentacao     Int?     @map("c31_fundamentacao")
-  c32Metodo            Int?     @map("c32_metodo")
-  c35Originalidade     Int?     @map("c35_originalidade")
-  c34Conclusao         Int?     @map("c34_conclusao")
-  total                Int      @default(0)
-  observacoes          String?  @db.Text
-  createdAt            DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  id                       BigInt   @id @default(autoincrement())
+  standId                  BigInt   @map("stand_id")
+  projetoId                BigInt   @map("projeto_id")
+  avaliadorUsuarioId       BigInt   @map("avaliador_usuario_id")
+  tentativa                Int      @default(1) @db.TinyInt
+  cPerguntaObjetivos       Int      @default(0) @map("c_pergunta_objetivos")
+  cProcessoInvestigativo   Int      @default(0) @map("c_processo_investigativo")
+  cAutoriaProtagonismo     Int      @default(0) @map("c_autoria_protagonismo")
+  cEvidenciasAprendizagem  Int      @default(0) @map("c_evidencias_aprendizagem")
+  cCriatividadeInovacao    Int      @default(0) @map("c_criatividade_inovacao")
+  cImpactoResponsabilidade Int      @default(0) @map("c_impacto_responsabilidade")
+  cComunicacaoCientifica   Int      @default(0) @map("c_comunicacao_cientifica")
+  cIntegracaoCienciaDelas  Int      @default(0) @map("c_integracao_ciencia_delas")
+  total                    Int      @default(0)
+  observacoes              String?  @db.Text
+  createdAt                DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
 
   stand     Stand   @relation(fields: [standId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliacoes_stand_fk")
   projeto   Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliacoes_projeto_fk")
   avaliador Usuario @relation(fields: [avaliadorUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliacoes_avaliador_fk")
 
-  @@unique([avaliadorUsuarioId, projetoId], map: "avaliacoes_avaliador_projeto_unique")
+  @@unique([avaliadorUsuarioId, standId], map: "avaliacoes_avaliador_stand_unique")
   @@index([standId], map: "avaliacoes_stand_idx")
   @@index([projetoId], map: "avaliacoes_projeto_idx")
   @@map("avaliacoes")
+}
+
+/// Reserva exclusiva de stand para um avaliador (expira em 25 minutos).
+model AvaliadorStandSorteio {
+  id                 BigInt   @id @default(autoincrement())
+  avaliadorUsuarioId BigInt   @map("avaliador_usuario_id")
+  standId            BigInt   @unique(map: "avaliador_stand_sorteios_stand_unique") @map("stand_id")
+  expiresAt          DateTime @map("expires_at") @db.DateTime(3)
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  avaliador Usuario @relation(fields: [avaliadorUsuarioId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_stand_sorteios_avaliador_fk")
+  stand     Stand   @relation(fields: [standId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "avaliador_stand_sorteios_stand_fk")
+
+  @@index([avaliadorUsuarioId], map: "avaliador_stand_sorteios_avaliador_idx")
+  @@index([expiresAt], map: "avaliador_stand_sorteios_expires_idx")
+  @@map("avaliador_stand_sorteios")
 }

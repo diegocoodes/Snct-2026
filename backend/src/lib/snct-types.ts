@@ -118,6 +118,14 @@ export type ManagedNotice = {
 export type SiteSettings = {
   eventEdition: string;
   heroImageUrl: string;
+  palette: {
+    background: string;
+    surface: string;
+    primary: string;
+    secondary: string;
+    accent: string;
+    text: string;
+  };
 };
 
 export type SnctStore = {

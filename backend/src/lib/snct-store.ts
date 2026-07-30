@@ -39,6 +39,14 @@ const allowedDocumentTypes: Record<string, Set<string>> = {
 const defaultSettings = {
   eventEdition: "Paulista 2026",
   heroImageUrl: "/images/cienciasemfundo.png",
+  palette: {
+    background: "#10002b",
+    surface: "#18003d",
+    primary: "#6a00ff",
+    secondary: "#ff2ed1",
+    accent: "#00e5ff",
+    text: "#f5f7ff",
+  },
 };
 
 let domainSeeded = false;
@@ -215,8 +223,15 @@ async function readStore(client?: PoolConnection) {
       run<{
         event_edition: string;
         hero_image_url: string;
+        color_background: string;
+        color_surface: string;
+        color_primary: string;
+        color_secondary: string;
+        color_accent: string;
+        color_text: string;
       } & RowDataPacket>(`
-        SELECT event_edition, hero_image_url
+        SELECT event_edition, hero_image_url, color_background, color_surface,
+               color_primary, color_secondary, color_accent, color_text
         FROM snct_site_settings WHERE id = 1
       `),
     ]);
@@ -257,6 +272,14 @@ async function readStore(client?: PoolConnection) {
       ? {
           eventEdition: settings.rows[0].event_edition,
           heroImageUrl: settings.rows[0].hero_image_url,
+          palette: {
+            background: settings.rows[0].color_background,
+            surface: settings.rows[0].color_surface,
+            primary: settings.rows[0].color_primary,
+            secondary: settings.rows[0].color_secondary,
+            accent: settings.rows[0].color_accent,
+            text: settings.rows[0].color_text,
+          },
         }
       : defaultSettings,
   } satisfies SnctStore;
@@ -379,9 +402,20 @@ async function syncContent(client: PoolConnection, store: SnctStore) {
   await clientQuery(
     client,
     `UPDATE snct_site_settings
-     SET event_edition = $1, hero_image_url = $2, updated_at = now()
+     SET event_edition = $1, hero_image_url = $2, color_background = $3,
+         color_surface = $4, color_primary = $5, color_secondary = $6,
+         color_accent = $7, color_text = $8, updated_at = now()
      WHERE id = 1`,
-    [store.settings.eventEdition, store.settings.heroImageUrl],
+    [
+      store.settings.eventEdition,
+      store.settings.heroImageUrl,
+      store.settings.palette.background,
+      store.settings.palette.surface,
+      store.settings.palette.primary,
+      store.settings.palette.secondary,
+      store.settings.palette.accent,
+      store.settings.palette.text,
+    ],
   );
 }
 

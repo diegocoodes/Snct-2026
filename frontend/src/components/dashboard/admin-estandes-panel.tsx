@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Pencil,
   Plus,
+  Printer,
   Trash2,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -83,6 +84,47 @@ async function downloadStandQr(hash: string, codigo: string) {
   link.href = dataUrl;
   link.download = `qrcode-stand-${codigo}.png`;
   link.click();
+}
+
+async function printStandQrs(estandes: AdminEstande[]) {
+  const printable = estandes.filter((item) => item.qrCodeHash).slice(0, 4);
+  const qrs = await Promise.all(
+    printable.map(async (item) => ({
+      ...item,
+      src: await QRCode.toDataURL(buildStandQrPayload(item.qrCodeHash), {
+        width: 900,
+        margin: 2,
+        errorCorrectionLevel: "H",
+        color: { dark: "#10002b", light: "#ffffff" },
+      }),
+    })),
+  );
+  const printWindow = window.open("", "_blank", "width=900,height=900");
+  if (!printWindow) throw new Error("A janela de impressão foi bloqueada.");
+  printWindow.document.write(`<!doctype html>
+    <html lang="pt-BR"><head><title>QR Codes dos stands</title>
+    <style>
+      @page { size: A4; margin: 12mm; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Arial, sans-serif; color: #10002b; }
+      main { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+      article { min-height: 125mm; display: grid; place-items: center; align-content: center;
+        border: 1px dashed #777; border-radius: 10px; padding: 8mm; break-inside: avoid; }
+      img { width: 78mm; height: 78mm; }
+      h1 { margin: 0 0 4mm; font-size: 22pt; }
+      p { margin: 3mm 0 0; font-size: 11pt; text-align: center; }
+    </style></head><body><main>
+      ${qrs
+        .map(
+          (item) => `<article><h1>Stand ${item.codigo}</h1>
+            <img src="${item.src}" alt="QR Code do stand ${item.codigo}">
+            <p>${item.projetoTitulo ?? item.nome ?? "SNCT Paulista 2026"}</p>
+          </article>`,
+        )
+        .join("")}
+    </main><script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
+    </body></html>`);
+  printWindow.document.close();
 }
 
 function StandQrThumb({ hash, codigo }: { hash: string; codigo: string }) {
@@ -239,8 +281,11 @@ function AdminEstandesPanel() {
 
   const formKey = creating ? "new" : (editing?.id ?? "closed");
   const statusLocked = Boolean(editing && statusNovo === "OCUPADO");
-  const filterFn = useCallback(filterEstande, []);
-  const list = useFilteredPagination({ items: estandes, filterFn });
+  const filterFn = useCallback(
+    (estande: AdminEstande, query: string) => filterEstande(estande, query),
+    [],
+  );
+  const list = useFilteredPagination({ items: estandes, filterFn, pageSize: 4 });
 
   if (loading) {
     return (
@@ -265,9 +310,27 @@ function AdminEstandesPanel() {
               automaticamente para o avaliador escanear.
             </p>
           </div>
-          <Button type="button" onClick={openCreate}>
-            <Plus aria-hidden /> Criar stand
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!list.pageItems.some((item) => item.qrCodeHash)}
+              onClick={() =>
+                void printStandQrs(list.pageItems).catch((error) =>
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Não foi possível imprimir.",
+                  ),
+                )
+              }
+            >
+              <Printer aria-hidden /> Imprimir 4 QR Codes
+            </Button>
+            <Button type="button" onClick={openCreate}>
+              <Plus aria-hidden /> Criar stand
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <AdminListSearch

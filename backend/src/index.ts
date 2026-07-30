@@ -26,6 +26,7 @@ import * as arena from "@/routes/arena";
 import * as registro from "@/routes/registro";
 import * as staff from "@/routes/staff";
 import * as uploads from "@/routes/uploads";
+import * as gameForms from "@/routes/game-forms";
 
 const PORT = Number(process.env.PORT ?? 4101);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -110,10 +111,19 @@ mount("get", "/api/professor", professor.GET);
 mount("post", "/api/professor", professor.POST);
 mount("delete", "/api/professor", professor.DELETE);
 mount("get", "/api/avaliador/criterios", avaliador.GET_CRITERIOS);
+mount("get", "/api/avaliador/avaliacoes", avaliador.GET_MINHAS_AVALIACOES);
+mount("post", "/api/avaliador/comecar-avaliacao", avaliador.POST_COMECAR_AVALIACAO);
+mount("get", "/api/avaliador/stand-sorteado", avaliador.GET_STAND_SORTEADO);
 mount("get", "/api/avaliador/stand/:qrCodeHash", (request, qrCodeHash) =>
   avaliador.GET_STAND(request, qrCodeHash),
 );
 mount("post", "/api/avaliador/avaliacoes", avaliador.POST_AVALIACAO);
+mount("get", "/api/formularios/:slug", (request, slug) =>
+  gameForms.GET(request, slug),
+);
+mount("post", "/api/formularios/:slug", (request, slug) =>
+  gameForms.POST(request, slug),
+);
 mount("get", "/api/checkins/participantes", checkins.GET_PARTICIPANTES);
 mount("get", "/api/checkins/buscar", checkins.GET_BUSCAR);
 mount("get", "/api/checkins/usuario/:usuarioId/historico", (request, usuarioId) =>
