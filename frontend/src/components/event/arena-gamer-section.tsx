@@ -42,19 +42,20 @@ function ArenaGamerSection() {
             id="arena-gamer-title"
             className="mt-4 max-w-xl text-balance font-display text-3xl leading-tight font-semibold text-ice-white sm:text-4xl"
           >
-            Monte seu time e entre na disputa
+            Entre na disputa da Arena Gamer
           </h2>
           <p className="mt-5 max-w-xl text-sm leading-7 text-blue-gray sm:text-base">
-            Inscreva uma equipe com cinco participantes para competir em League
-            of Legends, Valorant ou Free Fire na Arena Gamer da SNCT Paulista.
+            LoL e Valorant em times de cinco (máximo 10 times por jogo). Free
+            Fire em inscrição individual. Participe da Arena Gamer da SNCT
+            Paulista.
           </p>
 
           <div className="mt-7 flex flex-wrap gap-3">
             <span className="inline-flex items-center gap-2 rounded-full border border-purple-vibrant/30 bg-purple-vibrant/10 px-3 py-2 text-xs text-[#D6C8FF]">
-              <Swords className="size-4" aria-hidden /> Times de 5 jogadores
+              <Swords className="size-4" aria-hidden /> LoL/Valorant: até 10 times
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-magenta-neon/25 bg-magenta-neon/10 px-3 py-2 text-xs text-[#FFC2F2]">
-              <Trophy className="size-4" aria-hidden /> Vagas limitadas
+              <Trophy className="size-4" aria-hidden /> Free Fire: individual
             </span>
           </div>
 
@@ -108,7 +109,7 @@ function ArenaGamerSection() {
               className="w-full shadow-[0_12px_35px_rgb(0_229_255/20%)]"
               render={<Link href="/auth/inscricao/arena" />}
             >
-              Inscrever meu time
+              Inscrever-me na Arena
               <ArrowRight aria-hidden />
             </Button>
           </div>

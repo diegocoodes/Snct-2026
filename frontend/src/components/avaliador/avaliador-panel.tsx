@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   ClipboardCheck,
   Dices,
   LoaderCircle,
@@ -15,10 +14,9 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Textarea } from "@/components/ui/textarea";
+import { AvaliadorRankingLive } from "@/components/avaliador/avaliador-ranking-live";
 import { extractQrHash } from "@/lib/qr-payload";
 import { secureFetch } from "@/lib/secure-fetch";
 
@@ -65,6 +63,8 @@ type TitulacaoOpcao = {
   faixaEtaria: string;
   referenciaEscolar: string;
   enfase: string;
+  idadeMin: number;
+  idadeMax: number;
   disponivel: boolean;
   concedida: {
     alunoId: string;
@@ -94,6 +94,13 @@ type AvaliacaoListaItem = {
   createdAt: string;
 };
 
+type AvaliacaoMeta = {
+  feitas: number;
+  minimo: number;
+  restante: number;
+  metaAtingida: boolean;
+};
+
 type StandAtribuido = {
   id: string;
   codigo: string;
@@ -108,7 +115,7 @@ type StandAtribuido = {
 };
 
 /** inicio → atribuido → confirmar-qr → ficha */
-type Mode = "inicio" | "atribuido" | "confirmar-qr" | "ficha";
+type Mode = "inicio" | "atribuido" | "confirmar-qr" | "ficha" | "titulacao";
 
 function formatDateTime(iso: string) {
   const date = new Date(iso);
@@ -138,6 +145,13 @@ function AvaliadorPanel() {
   const [avaliacoesFeitas, setAvaliacoesFeitas] = useState<AvaliacaoListaItem[]>(
     [],
   );
+  const [metaAvaliacoes, setMetaAvaliacoes] = useState<AvaliacaoMeta>({
+    feitas: 0,
+    minimo: 18,
+    restante: 18,
+    metaAtingida: false,
+  });
+  const [buscaAvaliados, setBuscaAvaliados] = useState("");
   const [standAtribuido, setStandAtribuido] = useState<StandAtribuido | null>(
     null,
   );
@@ -151,7 +165,6 @@ function AvaliadorPanel() {
   const [titulacaoAlunoPorCategoria, setTitulacaoAlunoPorCategoria] = useState<
     Record<string, string>
   >({});
-  const [titulacaoBusy, setTitulacaoBusy] = useState<string | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
   const [observacoes, setObservacoes] = useState("");
 
@@ -162,6 +175,31 @@ function AvaliadorPanel() {
       return Number.isFinite(n) ? sum + n : sum;
     }, 0);
   }, [notas]);
+
+  const criteriosPreenchidos = useMemo(() => {
+    return criterios.filter((criterio) => {
+      const value = notas[criterio.key];
+      return value !== "" && value != null;
+    }).length;
+  }, [criterios, notas]);
+
+  const fichaPronta = criterios.length > 0 && criteriosPreenchidos === criterios.length;
+
+  const avaliacoesFiltradas = useMemo(() => {
+    const q = buscaAvaliados.trim().toLowerCase();
+    if (!q) return avaliacoesFeitas;
+    return avaliacoesFeitas.filter((item) => {
+      const haystack = [
+        item.standCodigo,
+        item.standNome,
+        item.projetoTitulo,
+        item.projetoTema ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [avaliacoesFeitas, buscaAvaliados]);
 
   const destroyScanner = useCallback(() => {
     const scanner = scannerRef.current;
@@ -186,12 +224,26 @@ function AvaliadorPanel() {
       const data = (await response.json()) as {
         error?: string;
         avaliacoes?: AvaliacaoListaItem[];
+        meta?: AvaliacaoMeta;
       };
       if (!response.ok) {
         toast.error(data.error ?? "Não foi possível carregar suas avaliações.");
         return;
       }
-      setAvaliacoesFeitas(data.avaliacoes ?? []);
+      const avaliacoes = data.avaliacoes ?? [];
+      setAvaliacoesFeitas(avaliacoes);
+      if (data.meta) {
+        setMetaAvaliacoes(data.meta);
+      } else {
+        const minimo = 18;
+        const feitas = avaliacoes.length;
+        setMetaAvaliacoes({
+          feitas,
+          minimo,
+          restante: Math.max(0, minimo - feitas),
+          metaAtingida: feitas >= minimo,
+        });
+      }
     } catch {
       toast.error("Falha de rede ao carregar avaliações.");
     } finally {
@@ -210,13 +262,114 @@ function AvaliadorPanel() {
     setStandAtribuido(null);
     setTitulacoes(null);
     setTitulacaoAlunoPorCategoria({});
-    setTitulacaoBusy(null);
     setManualHash("");
     setCameraError("");
+    setBuscaAvaliados("");
     setMode("inicio");
     destroyScanner();
     router.replace(pathname);
   }, [destroyScanner, pathname, router]);
+
+  async function abrirTitulacaoDoStand(standId: string) {
+    setLoading(true);
+    try {
+      const response = await secureFetch(
+        `/api/avaliador/stands/${encodeURIComponent(standId)}/titulacao`,
+      );
+      const data = (await response.json()) as {
+        error?: string;
+        stand?: StandInfo;
+        projeto?: ProjetoInfo;
+        titulacoes?: TitulacoesEstado;
+      };
+      if (!response.ok) {
+        toast.error(data.error ?? "Não foi possível abrir este stand.");
+        return;
+      }
+      setStand(data.stand ?? null);
+      setProjeto(data.projeto ?? null);
+      setTitulacoes(data.titulacoes ?? null);
+      setTitulacaoAlunoPorCategoria({});
+      setMode("titulacao");
+    } catch {
+      toast.error("Falha de rede ao abrir o stand.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function salvarTitulacoesAvulsas() {
+    if (!stand || !projeto) return;
+    const pedidos = (titulacoes?.opcoes ?? [])
+      .filter((opcao) => opcao.disponivel && !opcao.concedida)
+      .map((opcao) => {
+        const alunoId = titulacaoAlunoPorCategoria[opcao.codigo]?.trim();
+        if (!alunoId) return null;
+        return { categoria: opcao.codigo, alunoId };
+      })
+      .filter((item): item is { categoria: string; alunoId: string } =>
+        Boolean(item),
+      );
+
+    if (pedidos.length === 0) {
+      toast.error("Escolha pelo menos um aluno para premiar, ou volte.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      let okCount = 0;
+      for (const pedido of pedidos) {
+        const response = await secureFetch("/api/avaliador/titulacoes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            categoria: pedido.categoria,
+            alunoId: pedido.alunoId,
+            standId: stand.id,
+            projetoId: projeto.id,
+          }),
+        });
+        const data = (await response.json()) as {
+          error?: string;
+          titulacao?: { titulo: string; alunoNome: string };
+          opcoes?: TitulacaoOpcao[];
+          dataEvento?: string;
+          totalPorDia?: number;
+          disponiveis?: number;
+          usadas?: number;
+        };
+        if (!response.ok) {
+          toast.error(data.error ?? "Não foi possível conceder o título.");
+          continue;
+        }
+        okCount += 1;
+        toast.success(
+          data.titulacao
+            ? `Título "${data.titulacao.titulo}" concedido a ${data.titulacao.alunoNome}.`
+            : "Título concedido.",
+        );
+        if (data.opcoes) {
+          setTitulacoes({
+            dataEvento: data.dataEvento ?? titulacoes?.dataEvento ?? "",
+            totalPorDia: data.totalPorDia ?? 3,
+            disponiveis: data.disponiveis ?? 0,
+            usadas: data.usadas ?? 0,
+            opcoes: data.opcoes,
+          });
+        }
+      }
+      if (okCount > 0) {
+        setTitulacaoAlunoPorCategoria({});
+        await loadAvaliacoesFeitas();
+        resetParaInicio();
+      }
+    } catch {
+      toast.error("Falha de rede ao conceder títulos.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const confirmarQrDoStand = useCallback(
     async (raw: string) => {
@@ -415,64 +568,6 @@ function AvaliadorPanel() {
     setScannerReady((value) => value + 1);
   }
 
-  async function concederTitulo(categoria: string) {
-    if (!stand || !projeto) return;
-    const alunoId = titulacaoAlunoPorCategoria[categoria];
-    if (!alunoId) {
-      toast.error("Selecione a aluna/aluno para conceder este título.");
-      return;
-    }
-    setTitulacaoBusy(categoria);
-    try {
-      const response = await secureFetch("/api/avaliador/titulacoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          categoria,
-          alunoId,
-          standId: stand.id,
-          projetoId: projeto.id,
-        }),
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        titulacao?: { titulo: string; alunoNome: string };
-        dataEvento?: string;
-        totalPorDia?: number;
-        disponiveis?: number;
-        usadas?: number;
-        opcoes?: TitulacaoOpcao[];
-      };
-      if (!response.ok) {
-        toast.error(data.error ?? "Não foi possível conceder o título.");
-        return;
-      }
-      toast.success(
-        data.titulacao
-          ? `Título "${data.titulacao.titulo}" concedido a ${data.titulacao.alunoNome}.`
-          : "Título concedido.",
-      );
-      if (data.opcoes) {
-        setTitulacoes({
-          dataEvento: data.dataEvento ?? titulacoes?.dataEvento ?? "",
-          totalPorDia: data.totalPorDia ?? 3,
-          disponiveis: data.disponiveis ?? 0,
-          usadas: data.usadas ?? 0,
-          opcoes: data.opcoes,
-        });
-      }
-      setTitulacaoAlunoPorCategoria((prev) => {
-        const next = { ...prev };
-        delete next[categoria];
-        return next;
-      });
-    } catch {
-      toast.error("Falha de rede ao conceder o título.");
-    } finally {
-      setTitulacaoBusy(null);
-    }
-  }
-
   async function onSubmitAvaliacao(event: FormEvent) {
     event.preventDefault();
     if (!stand || !projeto) return;
@@ -497,6 +592,17 @@ function AvaliadorPanel() {
       payloadNotas[criterio.key] = Number(notas[criterio.key]);
     }
 
+    const titulacoesPedido = (titulacoes?.opcoes ?? [])
+      .filter((opcao) => opcao.disponivel && !opcao.concedida)
+      .map((opcao) => {
+        const alunoId = titulacaoAlunoPorCategoria[opcao.codigo]?.trim();
+        if (!alunoId) return null;
+        return { categoria: opcao.codigo, alunoId };
+      })
+      .filter((item): item is { categoria: string; alunoId: string } =>
+        Boolean(item),
+      );
+
     setBusy(true);
     try {
       const response = await secureFetch("/api/avaliador/avaliacoes", {
@@ -507,14 +613,30 @@ function AvaliadorPanel() {
           projetoId: projeto.id,
           notas: payloadNotas,
           observacoes,
+          titulacoes: titulacoesPedido,
         }),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        titulacoesConcedidas?: {
+          titulo: string;
+          alunoNome: string;
+        }[];
+        titulacaoErros?: string[];
+      };
       if (!response.ok) {
         toast.error(data.error ?? "Não foi possível salvar a avaliação.");
         return;
       }
       toast.success("Avaliação registrada com sucesso.");
+      for (const item of data.titulacoesConcedidas ?? []) {
+        toast.success(
+          `Título "${item.titulo}" concedido a ${item.alunoNome}.`,
+        );
+      }
+      for (const erro of data.titulacaoErros ?? []) {
+        toast.error(erro);
+      }
       await loadAvaliacoesFeitas();
       resetParaInicio();
     } catch {
@@ -526,18 +648,21 @@ function AvaliadorPanel() {
 
   return (
     <div className="space-y-6">
-      <header className="max-w-3xl">
-        <p className="font-display text-sm tracking-[.2em] text-cyan-electric uppercase">
-          Avaliador
-        </p>
-        <h1 className="mt-2 font-display text-3xl font-semibold text-ice-white">
-          Avaliar trabalhos
-        </h1>
-        <p className="mt-3 text-blue-gray">
-          Clique em Começar Avaliação para receber o stand, vá até ele e, ao
-          preencher, confirme o QR Code do stand antes de abrir a ficha.
-        </p>
-      </header>
+      {mode === "inicio" ? (
+        <header className="max-w-3xl">
+          <p className="font-display text-sm tracking-[.2em] text-cyan-electric uppercase">
+            Avaliador
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-semibold text-ice-white">
+            Avaliar trabalhos
+          </h1>
+          <p className="mt-3 text-blue-gray">
+            Clique em Começar Avaliação para receber o stand, vá até ele e, ao
+            preencher, confirme o QR Code do stand antes de abrir a ficha. Cada
+            avaliador deve avaliar pelo menos {metaAvaliacoes.minimo} stands.
+          </p>
+        </header>
+      ) : null}
 
       {mode === "inicio" ? (
         <Card className="border-cyan-electric/20">
@@ -548,6 +673,58 @@ function AvaliadorPanel() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-xs tracking-wide text-blue-gray uppercase">
+                    Meta de avaliações
+                  </p>
+                  <p className="mt-1 font-display text-2xl font-semibold text-ice-white">
+                    {metaAvaliacoes.feitas}
+                    <span className="text-base font-normal text-blue-gray">
+                      /{metaAvaliacoes.minimo}
+                    </span>
+                  </p>
+                </div>
+                {metaAvaliacoes.metaAtingida ? (
+                  <StatusBadge status="success">Meta atingida</StatusBadge>
+                ) : (
+                  <StatusBadge status="warning">
+                    Faltam {metaAvaliacoes.restante}
+                  </StatusBadge>
+                )}
+              </div>
+              <div
+                className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={metaAvaliacoes.minimo}
+                aria-valuenow={Math.min(
+                  metaAvaliacoes.feitas,
+                  metaAvaliacoes.minimo,
+                )}
+                aria-label="Progresso da meta de avaliações"
+              >
+                <div
+                  className={
+                    metaAvaliacoes.metaAtingida
+                      ? "h-full rounded-full bg-emerald-400 transition-all"
+                      : "h-full rounded-full bg-cyan-electric transition-all"
+                  }
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      (metaAvaliacoes.feitas / metaAvaliacoes.minimo) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-blue-gray">
+                {metaAvaliacoes.metaAtingida
+                  ? "Você já cumpriu a meta mínima. Pode continuar avaliando se quiser."
+                  : `Avalie pelo menos ${metaAvaliacoes.minimo} stands para cumprir a meta.`}
+              </p>
+            </div>
             <Button
               type="button"
               variant="glow"
@@ -570,25 +747,16 @@ function AvaliadorPanel() {
         </Card>
       ) : null}
 
+      {mode === "inicio" ? <AvaliadorRankingLive /> : null}
+
       {mode === "atribuido" && standAtribuido ? (
         <Card className="border-purple-vibrant/20">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle>Stand atribuído</CardTitle>
-              <p className="mt-1 text-sm text-blue-gray">
-                Dirija-se a este stand. Ao chegar, clique em Preencher e escaneie
-                o QR Code para liberar a ficha.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={resetParaInicio}
-            >
-              <ArrowLeft className="size-4" aria-hidden />
-              Cancelar
-            </Button>
+          <CardHeader>
+            <CardTitle>Stand atribuído</CardTitle>
+            <p className="mt-1 text-sm text-blue-gray">
+              Dirija-se a este stand. Ao chegar, clique em Preencher e escaneie
+              o QR Code para liberar a ficha.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-2xl border border-cyan-electric/30 bg-cyan-electric/10 p-6 text-center">
@@ -639,33 +807,19 @@ function AvaliadorPanel() {
 
       {mode === "confirmar-qr" && standAtribuido ? (
         <Card className="border-cyan-electric/20">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <ScanLine className="size-5 text-cyan-electric" aria-hidden />
-                Confirmar stand {standAtribuido.codigo}
-              </CardTitle>
-              <p className="mt-1 text-sm text-blue-gray">
-                Escaneie o QR Code do stand {standAtribuido.codigo} para abrir a
-                ficha de avaliação.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                destroyScanner();
-                setMode("atribuido");
-              }}
-            >
-              <ArrowLeft className="size-4" aria-hidden />
-              Voltar
-            </Button>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ScanLine className="size-5 text-cyan-electric" aria-hidden />
+              Confirmar stand {standAtribuido.codigo}
+            </CardTitle>
+            <p className="mt-1 text-sm text-blue-gray">
+              Escaneie o QR Code do stand {standAtribuido.codigo} para abrir a
+              ficha de avaliação.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-2xl border border-cyan-electric/20 bg-cyan-electric/5 px-4 py-3 text-center">
-              <p className="text-xs text-blue-gray uppercase tracking-wide">
+              <p className="text-xs tracking-wide text-blue-gray uppercase">
                 Stand esperado
               </p>
               <p className="mt-1 font-display text-3xl text-ice-white">
@@ -692,380 +846,549 @@ function AvaliadorPanel() {
                 Confirmando stand…
               </p>
             ) : null}
-            <form
-              className="flex flex-col gap-3 sm:flex-row sm:items-end"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void confirmarQrDoStand(manualHash);
-              }}
-            >
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="stand-hash">Ou cole o código do QR</Label>
-                <Input
-                  id="stand-hash"
-                  value={manualHash}
-                  onChange={(event) => setManualHash(event.target.value)}
-                  placeholder="Cole o hash ou a URL do QR do stand"
-                />
-              </div>
-              <Button type="submit" disabled={loading || !manualHash.trim()}>
-                Confirmar
-              </Button>
-            </form>
           </CardContent>
         </Card>
       ) : null}
 
       {mode === "ficha" && stand && projeto ? (
         <Card className="border-cyan-electric/20">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle>Ficha de avaliação — Stand {stand.codigo}</CardTitle>
-              <p className="mt-1 text-sm text-blue-gray">
-                Critérios do edital — total de até {totalMaximo} pontos.
+          <CardContent className="space-y-5 pt-6">
+            <div className="rounded-2xl border border-cyan-electric/30 bg-cyan-electric/10 px-4 py-5 text-center">
+              <p className="text-xs tracking-[0.2em] text-cyan-electric uppercase">
+                Avaliando agora
               </p>
+              <p className="mt-1 font-display text-5xl font-semibold text-ice-white">
+                Stand {stand.codigo}
+              </p>
+              <p className="mt-3 text-base font-medium break-words text-ice-white">
+                {projeto.titulo}
+              </p>
+              <p className="mt-1 text-sm text-blue-gray">{projeto.instituicao}</p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setMode("atribuido");
-                setStand(null);
-                setProjeto(null);
-              }}
-            >
-              <ArrowLeft className="size-4" aria-hidden />
-              Voltar
-            </Button>
-          </CardHeader>
-          <CardContent>
+
+            <ol className="grid gap-2 sm:grid-cols-3">
+              {[
+                { n: "1", t: "Dê as notas", d: "Toque um número em cada critério" },
+                { n: "2", t: "Título especial", d: "Só se alguém realmente se destacar" },
+                { n: "3", t: "Salvar", d: "Confirme no botão verde no final" },
+              ].map((step) => (
+                <li
+                  key={step.n}
+                  className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-cyan-electric/20 font-display text-sm text-cyan-electric">
+                    {step.n}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ice-white">
+                      {step.t}
+                    </span>
+                    <span className="block text-xs text-blue-gray">{step.d}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+
             <form className="space-y-6" onSubmit={onSubmitAvaliacao}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Título do trabalho</Label>
-                  <Input value={projeto.titulo} readOnly />
-                </div>
-                <div className="space-y-2">
-                  <Label>Instituição</Label>
-                  <Input value={projeto.instituicao} readOnly />
-                </div>
-              </div>
-
-              {escalaDesempenho.length ? (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-                  <p className="text-xs tracking-wide text-cyan-electric uppercase">
-                    Escala de desempenho (referência)
-                  </p>
-                  <ul className="mt-3 space-y-2 text-sm text-blue-gray">
-                    {escalaDesempenho.map((item) => (
-                      <li key={item.nivel}>
-                        <span className="text-ice-white">{item.nivel}</span>
-                        {" — "}
-                        {item.faixa}: {item.referencia}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <ul className="space-y-3">
-                {criterios.map((criterio) => {
-                  const opcoes = Array.from(
-                    { length: criterio.maximo + 1 },
-                    (_, i) => String(i),
-                  );
-                  return (
-                    <li
-                      key={criterio.key}
-                      className="rounded-2xl border border-white/10 bg-white/[0.02] p-4"
-                    >
-                      <p className="text-sm text-ice-white">
-                        <span className="text-cyan-electric">
-                          {criterio.codigo}.
-                        </span>{" "}
-                        {criterio.label}
-                        <span className="ml-2 text-xs text-blue-gray">
-                          (máx. {criterio.maximo})
-                        </span>
-                      </p>
-                      <p className="mt-1 text-sm text-blue-gray">
-                        {criterio.descricao}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {opcoes.map((opcao) => {
-                          const selected = notas[criterio.key] === opcao;
-                          return (
-                            <button
-                              key={opcao}
-                              type="button"
-                              className={
-                                selected
-                                  ? "min-w-10 rounded-xl border border-cyan-electric bg-cyan-electric/20 px-3 py-1.5 text-sm text-ice-white"
-                                  : "min-w-10 rounded-xl border border-white/15 bg-transparent px-3 py-1.5 text-sm text-blue-gray hover:border-cyan-electric/40"
-                              }
-                              onClick={() =>
-                                setNotas((prev) => ({
-                                  ...prev,
-                                  [criterio.key]: opcao,
-                                }))
-                              }
-                            >
-                              {opcao}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <div className="rounded-2xl border border-purple-vibrant/30 bg-purple-vibrant/10 px-4 py-3 text-ice-white">
-                TOTAL:{" "}
-                <strong className="font-display text-xl">{total}</strong>
-                <span className="text-blue-gray"> / {totalMaximo}</span>
-              </div>
-
-              <section className="space-y-4 rounded-2xl border border-cyan-electric/20 bg-cyan-electric/[0.04] p-4">
-                <div>
-                  <h3 className="font-display text-sm tracking-wide text-cyan-electric uppercase">
-                    Avaliação extra — titulações do dia
-                  </h3>
-                  <p className="mt-2 text-sm text-blue-gray">
-                    Além da nota do stand, você pode reconhecer individualmente
-                    uma aluna/aluno com um dos 3 títulos abaixo. Cada título só
-                    pode ser concedido <strong className="text-ice-white">uma vez por dia</strong>{" "}
-                    e para <strong className="text-ice-white">um único candidato</strong>.
-                    Ao usar as 3 titulações, novas só voltam no próximo dia do
-                    evento. Restam{" "}
-                    <strong className="text-ice-white">
-                      {titulacoes?.disponiveis ?? 0}/
-                      {titulacoes?.totalPorDia ?? 3}
-                    </strong>{" "}
-                    hoje.
-                  </p>
-                </div>
-
-                <div className="overflow-x-auto rounded-xl border border-white/10">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-white/[0.04] text-xs tracking-wide text-blue-gray uppercase">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Categoria</th>
-                        <th className="px-3 py-2 font-medium">Faixa etária</th>
-                        <th className="px-3 py-2 font-medium">
-                          Referência escolar
-                        </th>
-                        <th className="px-3 py-2 font-medium">Ênfase</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(titulacoes?.opcoes ?? []).map((item) => (
-                        <tr
-                          key={item.codigo}
-                          className="border-t border-white/10 text-blue-gray"
-                        >
-                          <td className="px-3 py-2 text-ice-white">
-                            {item.titulo}
-                          </td>
-                          <td className="px-3 py-2">{item.faixaEtaria}</td>
-                          <td className="px-3 py-2">{item.referenciaEscolar}</td>
-                          <td className="px-3 py-2">{item.enfase}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div>
-                  <p className="text-xs tracking-wide text-blue-gray uppercase">
-                    Alunas/alunos deste stand
-                  </p>
-                  {projeto.alunos.length === 0 ? (
-                    <p className="mt-2 text-sm text-blue-gray">
-                      Nenhum aluno cadastrado neste projeto.
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-sm tracking-wide text-cyan-electric uppercase">
+                      Passo 1 — Notas
+                    </h3>
+                    <p className="mt-1 text-sm text-blue-gray">
+                      Toque na nota de cada item. Quanto maior o número, melhor.
                     </p>
-                  ) : (
-                    <ul className="mt-2 space-y-2">
-                      {projeto.alunos.map((aluno) => (
-                        <li
-                          key={aluno.id}
-                          className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-ice-white"
-                        >
-                          {aluno.nomeCompleto}
-                          {typeof aluno.idade === "number" ? (
-                            <span className="ml-2 text-blue-gray">
-                              ({aluno.idade} anos)
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  </div>
+                  <p className="rounded-full border border-white/10 px-3 py-1 text-xs text-blue-gray">
+                    <span className="text-ice-white">
+                      {criteriosPreenchidos}/{criterios.length}
+                    </span>{" "}
+                    preenchidos
+                  </p>
+                </div>
+
+                <ul className="space-y-3">
+                  {criterios.map((criterio, index) => {
+                    const opcoes = Array.from(
+                      { length: criterio.maximo + 1 },
+                      (_, i) => String(i),
+                    );
+                    const selected = notas[criterio.key] ?? "";
+                    return (
+                      <li
+                        key={criterio.key}
+                        className={
+                          selected !== ""
+                            ? "rounded-2xl border border-cyan-electric/40 bg-cyan-electric/[0.06] p-4"
+                            : "rounded-2xl border border-white/10 bg-white/[0.02] p-4"
+                        }
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-xs font-medium text-cyan-electric">
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-ice-white">
+                              {criterio.label}
+                            </p>
+                            <p className="mt-1 text-sm text-blue-gray">
+                              {criterio.descricao}
+                            </p>
+                            <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-blue-gray">
+                              <span>Pior</span>
+                              <span>Melhor (máx. {criterio.maximo})</span>
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-2">
+                              {opcoes.map((opcao) => {
+                                const isSelected = selected === opcao;
+                                return (
+                                  <button
+                                    key={opcao}
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    className={
+                                      isSelected
+                                        ? "min-h-11 min-w-11 rounded-xl border border-cyan-electric bg-cyan-electric text-base font-semibold text-[#0b1020] shadow-[0_0_20px_rgba(34,211,238,0.35)]"
+                                        : "min-h-11 min-w-11 rounded-xl border border-white/15 bg-[#111329] text-base text-blue-gray transition hover:border-cyan-electric/50 hover:text-ice-white"
+                                    }
+                                    onClick={() =>
+                                      setNotas((prev) => ({
+                                        ...prev,
+                                        [criterio.key]: opcao,
+                                      }))
+                                    }
+                                  >
+                                    {opcao}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+
+              <section className="space-y-4 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-3 sm:p-4">
+                <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-3">
+                  <p className="text-sm font-medium text-ice-white">
+                    Passo 2 — Título especial do dia
+                  </p>
+                  <div className="mt-2 space-y-2 text-sm leading-relaxed text-blue-gray">
+                    <p>
+                      Essa titulação é{" "}
+                      <strong className="text-ice-white">muito especial</strong>.
+                      Não precisa dar na primeira avaliação.
+                    </p>
+                    <p>
+                      Você pode avaliar outros stands primeiro e, quando
+                      encontrar quem{" "}
+                      <strong className="text-ice-white">
+                        realmente se destacou
+                      </strong>
+                      , premiar aqui — ou clicar no stand na lista{" "}
+                      <strong className="text-ice-white">
+                        Stands Já Avaliados
+                      </strong>{" "}
+                      para entregar o título depois.
+                    </p>
+                    <p>
+                      Se ainda não tiver certeza, escolha{" "}
+                      <strong className="text-ice-white">
+                        “Não premiar agora”
+                      </strong>{" "}
+                      e salve só as notas.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
-                  {(titulacoes?.opcoes ?? []).map((opcao) => (
-                    <div
-                      key={opcao.codigo}
-                      className="rounded-xl border border-white/10 bg-[#111329]/60 p-3"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium text-ice-white">
+                  {(titulacoes?.opcoes ?? []).map((opcao) => {
+                    const elegiveis = projeto.alunos.filter(
+                      (aluno) =>
+                        typeof aluno.idade === "number" &&
+                        aluno.idade >= (opcao.idadeMin ?? 0) &&
+                        aluno.idade <= (opcao.idadeMax ?? 120),
+                    );
+                    const escolhido =
+                      titulacaoAlunoPorCategoria[opcao.codigo] ?? "";
+                    const jaUsado = !opcao.disponivel || Boolean(opcao.concedida);
+
+                    return (
+                      <div
+                        key={opcao.codigo}
+                        className="rounded-2xl border border-white/10 bg-[#111329]/80 p-4"
+                      >
+                        <p className="font-display text-base text-ice-white">
                           {opcao.titulo}
                         </p>
-                        {opcao.disponivel ? (
-                          <StatusBadge status="info">Disponível</StatusBadge>
+                        <p className="mt-1 text-sm text-blue-gray">
+                          Para quem tem {opcao.faixaEtaria}
+                        </p>
+
+                        {jaUsado ? (
+                          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-blue-gray">
+                            {opcao.concedida
+                              ? `Você já usou este título hoje (${opcao.concedida.alunoNome}).`
+                              : "Você já usou este título hoje."}
+                          </p>
+                        ) : elegiveis.length === 0 ? (
+                          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-blue-gray">
+                            Neste stand não há aluno nessa idade.
+                          </p>
                         ) : (
-                          <StatusBadge status="success">Usado hoje</StatusBadge>
+                          <div className="mt-3 space-y-2">
+                            <p className="text-sm text-ice-white">
+                              Quer premiar alguém deste stand?
+                            </p>
+                            <div className="grid gap-2">
+                              <button
+                                type="button"
+                                className={
+                                  escolhido === ""
+                                    ? "min-h-12 rounded-xl border border-cyan-electric/50 bg-cyan-electric/15 px-3 py-2 text-left text-sm text-ice-white"
+                                    : "min-h-12 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-left text-sm text-blue-gray"
+                                }
+                                onClick={() =>
+                                  setTitulacaoAlunoPorCategoria((prev) => {
+                                    const next = { ...prev };
+                                    delete next[opcao.codigo];
+                                    return next;
+                                  })
+                                }
+                              >
+                                Não premiar agora
+                              </button>
+                              {elegiveis.map((aluno) => {
+                                const ativo = escolhido === aluno.id;
+                                return (
+                                  <button
+                                    key={aluno.id}
+                                    type="button"
+                                    className={
+                                      ativo
+                                        ? "min-h-12 rounded-xl border border-cyan-electric bg-cyan-electric/20 px-3 py-2 text-left text-sm font-medium text-ice-white"
+                                        : "min-h-12 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-left text-sm text-blue-gray hover:border-cyan-electric/40 hover:text-ice-white"
+                                    }
+                                    onClick={() =>
+                                      setTitulacaoAlunoPorCategoria((prev) => ({
+                                        ...prev,
+                                        [opcao.codigo]: aluno.id,
+                                      }))
+                                    }
+                                  >
+                                    {aluno.nomeCompleto}
+                                    {typeof aluno.idade === "number" ? (
+                                      <span className="ml-2 text-xs opacity-80">
+                                        {aluno.idade} anos
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
                       </div>
-                      {opcao.concedida ? (
-                        <p className="mt-2 text-sm text-blue-gray">
-                          Concedido a{" "}
-                          <span className="text-ice-white">
-                            {opcao.concedida.alunoNome}
-                          </span>{" "}
-                          (stand {opcao.concedida.standCodigo}).
-                        </p>
-                      ) : (
-                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <Label htmlFor={`titulacao-${opcao.codigo}`}>
-                              Selecionar aluna/aluno
-                            </Label>
-                            <select
-                              id={`titulacao-${opcao.codigo}`}
-                              className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                              value={titulacaoAlunoPorCategoria[opcao.codigo] ?? ""}
-                              onChange={(event) =>
-                                setTitulacaoAlunoPorCategoria((prev) => ({
-                                  ...prev,
-                                  [opcao.codigo]: event.target.value,
-                                }))
-                              }
-                              disabled={projeto.alunos.length === 0}
-                            >
-                              <option value="">Selecione</option>
-                              {projeto.alunos.map((aluno) => (
-                                <option key={aluno.id} value={aluno.id}>
-                                  {aluno.nomeCompleto}
-                                  {typeof aluno.idade === "number"
-                                    ? ` (${aluno.idade} anos)`
-                                    : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={
-                              titulacaoBusy === opcao.codigo ||
-                              projeto.alunos.length === 0
-                            }
-                            onClick={() => void concederTitulo(opcao.codigo)}
-                          >
-                            {titulacaoBusy === opcao.codigo ? (
-                              <LoaderCircle
-                                className="size-4 animate-spin"
-                                aria-hidden
-                              />
-                            ) : null}
-                            Conceder título
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+
+                <p className="text-center text-xs text-blue-gray">
+                  Lembrete: cada título só pode ser usado 1 vez por dia. Use com
+                  cuidado para quem realmente brilhar.
+                </p>
               </section>
 
-              <div className="space-y-2">
-                <Label htmlFor="observacoes">Observações do avaliador</Label>
+              <section className="space-y-2">
+                <h3 className="font-display text-sm tracking-wide text-cyan-electric uppercase">
+                  Observações
+                  <span className="ml-2 text-[11px] font-normal tracking-normal text-blue-gray normal-case">
+                    (opcional)
+                  </span>
+                </h3>
                 <Textarea
                   id="observacoes"
                   value={observacoes}
                   onChange={(event) => setObservacoes(event.target.value)}
-                  rows={4}
-                  placeholder="Comentários opcionais"
+                  rows={3}
+                  placeholder="Se quiser, escreva um comentário rápido…"
                 />
-              </div>
+              </section>
 
-              <Button type="submit" variant="glow" disabled={busy}>
-                {busy ? (
-                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
-                ) : null}
-                Salvar avaliação
-              </Button>
+              <div className="sticky bottom-3 z-10 space-y-3 rounded-2xl border border-cyan-electric/30 bg-[#0d1224]/95 p-4 shadow-2xl backdrop-blur">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs tracking-wide text-blue-gray uppercase">
+                      Total da ficha
+                    </p>
+                    <p className="font-display text-2xl text-ice-white">
+                      {total}
+                      <span className="text-base text-blue-gray">
+                        {" "}
+                        / {totalMaximo}
+                      </span>
+                    </p>
+                  </div>
+                  {!fichaPronta ? (
+                    <p className="max-w-[11rem] text-right text-xs text-warning">
+                      Faltam {criterios.length - criteriosPreenchidos} nota(s)
+                    </p>
+                  ) : (
+                    <p className="text-xs text-cyan-electric">Pronto para salvar</p>
+                  )}
+                </div>
+                <Button
+                  type="submit"
+                  variant="glow"
+                  className="h-12 w-full text-base"
+                  disabled={busy || !fichaPronta}
+                >
+                  {busy ? (
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Salvar avaliação
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
       ) : null}
 
-      <Card className="border-white/10">
-        <CardHeader>
-          <CardTitle>Stands Já Avaliados</CardTitle>
-          <p className="text-sm text-blue-gray">
-            Histórico dos stands que você já avaliou nesta feira.
-          </p>
-        </CardHeader>
-        <CardContent>
-          {listaLoading ? (
-            <p className="flex items-center gap-2 text-sm text-blue-gray">
-              <LoaderCircle className="size-4 animate-spin" aria-hidden />
-              Carregando…
-            </p>
-          ) : avaliacoesFeitas.length === 0 ? (
-            <p className="text-sm text-blue-gray">
-              Você ainda não avaliou nenhum stand.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {avaliacoesFeitas.map((item) => (
-                <li
-                  key={item.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.02] p-4"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 space-y-1">
-                      <p className="font-medium text-ice-white">
-                        {item.standNome}
-                        <span className="ml-2 text-sm text-blue-gray">
-                          ({item.standCodigo})
-                        </span>
+      {mode === "titulacao" && stand && projeto ? (
+        <Card className="border-cyan-electric/20">
+          <CardContent className="space-y-5 pt-6">
+            <div className="rounded-2xl border border-cyan-electric/30 bg-cyan-electric/10 px-4 py-5 text-center">
+              <p className="text-xs tracking-[0.2em] text-cyan-electric uppercase">
+                Premiar título especial
+              </p>
+              <p className="mt-1 font-display text-4xl font-semibold text-ice-white">
+                Stand {stand.codigo}
+              </p>
+              <p className="mt-3 text-base font-medium break-words text-ice-white">
+                {projeto.titulo}
+              </p>
+              <p className="mt-1 text-sm text-blue-gray">{projeto.instituicao}</p>
+            </div>
+
+            <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-3 text-sm text-blue-gray">
+              Você já avaliou este stand. Agora pode entregar um título especial
+              a quem realmente se destacou — ou voltar sem premiar.
+            </div>
+
+            <div className="space-y-3">
+              {(titulacoes?.opcoes ?? []).map((opcao) => {
+                const elegiveis = projeto.alunos.filter(
+                  (aluno) =>
+                    typeof aluno.idade === "number" &&
+                    aluno.idade >= (opcao.idadeMin ?? 0) &&
+                    aluno.idade <= (opcao.idadeMax ?? 120),
+                );
+                const escolhido =
+                  titulacaoAlunoPorCategoria[opcao.codigo] ?? "";
+                const jaUsado = !opcao.disponivel || Boolean(opcao.concedida);
+
+                return (
+                  <div
+                    key={opcao.codigo}
+                    className="rounded-2xl border border-white/10 bg-[#111329]/80 p-4"
+                  >
+                    <p className="font-display text-base text-ice-white">
+                      {opcao.titulo}
+                    </p>
+                    <p className="mt-1 text-sm text-blue-gray">
+                      Para quem tem {opcao.faixaEtaria}
+                    </p>
+
+                    {jaUsado ? (
+                      <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-blue-gray">
+                        {opcao.concedida
+                          ? `Você já usou este título hoje (${opcao.concedida.alunoNome}).`
+                          : "Você já usou este título hoje."}
                       </p>
-                      <p className="text-sm text-blue-gray">
-                        Projeto:{" "}
-                        <span className="text-ice-white">
-                          {item.projetoTitulo}
-                        </span>
+                    ) : elegiveis.length === 0 ? (
+                      <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-blue-gray">
+                        Neste stand não há aluno nessa idade.
                       </p>
-                      <p className="text-sm text-blue-gray">
-                        Tema:{" "}
-                        <span className="text-ice-white">
-                          {item.projetoTema || "—"}
-                        </span>
-                      </p>
-                      <p className="text-sm text-blue-gray">
-                        Avaliado em {formatDateTime(item.createdAt)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-                      <StatusBadge status="success">
-                        {item.statusLabel}
-                      </StatusBadge>
-                      <p className="text-sm text-ice-white">
-                        Total: <strong>{item.total}</strong>
-                      </p>
-                    </div>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-sm text-ice-white">
+                          Quer premiar alguém deste stand?
+                        </p>
+                        <div className="grid gap-2">
+                          <button
+                            type="button"
+                            className={
+                              escolhido === ""
+                                ? "min-h-12 rounded-xl border border-cyan-electric/50 bg-cyan-electric/15 px-3 py-2 text-left text-sm text-ice-white"
+                                : "min-h-12 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-left text-sm text-blue-gray"
+                            }
+                            onClick={() =>
+                              setTitulacaoAlunoPorCategoria((prev) => {
+                                const next = { ...prev };
+                                delete next[opcao.codigo];
+                                return next;
+                              })
+                            }
+                          >
+                            Não premiar agora
+                          </button>
+                          {elegiveis.map((aluno) => {
+                            const ativo = escolhido === aluno.id;
+                            return (
+                              <button
+                                key={aluno.id}
+                                type="button"
+                                className={
+                                  ativo
+                                    ? "min-h-12 rounded-xl border border-cyan-electric bg-cyan-electric/20 px-3 py-2 text-left text-sm font-medium text-ice-white"
+                                    : "min-h-12 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-left text-sm text-blue-gray hover:border-cyan-electric/40 hover:text-ice-white"
+                                }
+                                onClick={() =>
+                                  setTitulacaoAlunoPorCategoria((prev) => ({
+                                    ...prev,
+                                    [opcao.codigo]: aluno.id,
+                                  }))
+                                }
+                              >
+                                {aluno.nomeCompleto}
+                                {typeof aluno.idade === "number" ? (
+                                  <span className="ml-2 text-xs opacity-80">
+                                    {aluno.idade} anos
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                );
+              })}
+            </div>
+
+            <div className="sticky bottom-3 z-10 space-y-2 rounded-2xl border border-cyan-electric/30 bg-[#0d1224]/95 p-4 shadow-2xl backdrop-blur">
+              <Button
+                type="button"
+                variant="glow"
+                className="h-12 w-full text-base"
+                disabled={busy || loading}
+                onClick={() => void salvarTitulacoesAvulsas()}
+              >
+                {busy ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                ) : null}
+                Confirmar premiação
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full"
+                disabled={busy}
+                onClick={resetParaInicio}
+              >
+                Voltar sem premiar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {mode === "inicio" ? (
+        <Card className="border-white/10">
+          <CardHeader>
+            <CardTitle>Stands Já Avaliados</CardTitle>
+            <p className="text-sm text-blue-gray">
+              Progresso: {metaAvaliacoes.feitas}/{metaAvaliacoes.minimo}. Toque
+              em um stand para entregar um título especial depois.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <input
+                type="search"
+                value={buscaAvaliados}
+                onChange={(event) => setBuscaAvaliados(event.target.value)}
+                placeholder="Buscar por stand, projeto ou tema…"
+                className="h-11 w-full rounded-xl border border-input bg-[#111329] px-3 text-sm text-ice-white outline-none placeholder:text-blue-gray focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+              />
+              {buscaAvaliados.trim() ? (
+                <p className="text-xs text-blue-gray">
+                  {avaliacoesFiltradas.length} resultado(s)
+                </p>
+              ) : null}
+            </div>
+            {listaLoading ? (
+              <p className="flex items-center gap-2 text-sm text-blue-gray">
+                <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                Carregando…
+              </p>
+            ) : avaliacoesFeitas.length === 0 ? (
+              <p className="text-sm text-blue-gray">
+                Você ainda não avaliou nenhum stand.
+              </p>
+            ) : avaliacoesFiltradas.length === 0 ? (
+              <p className="text-sm text-blue-gray">
+                Nenhum stand encontrado para “{buscaAvaliados.trim()}”.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {avaliacoesFiltradas.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-left transition hover:border-cyan-electric/40 hover:bg-cyan-electric/[0.04]"
+                      onClick={() => void abrirTitulacaoDoStand(item.standId)}
+                      disabled={loading}
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-medium text-ice-white">
+                            {item.standNome}
+                            <span className="ml-2 text-sm text-blue-gray">
+                              ({item.standCodigo})
+                            </span>
+                          </p>
+                          <p className="text-sm text-blue-gray">
+                            Projeto:{" "}
+                            <span className="text-ice-white">
+                              {item.projetoTitulo}
+                            </span>
+                          </p>
+                          <p className="text-sm text-blue-gray">
+                            Tema:{" "}
+                            <span className="text-ice-white">
+                              {item.projetoTema || "—"}
+                            </span>
+                          </p>
+                          <p className="text-sm text-blue-gray">
+                            Avaliado em {formatDateTime(item.createdAt)}
+                          </p>
+                          <p className="pt-1 text-xs text-cyan-electric">
+                            Toque para premiar um título especial
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+                          <StatusBadge status="success">
+                            {item.statusLabel}
+                          </StatusBadge>
+                          <p className="text-sm text-ice-white">
+                            Total: <strong>{item.total}</strong>
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -22,7 +22,7 @@ function contentSecurityPolicy(nonce: string, https: boolean) {
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https://paulista.pe.gov.br https://snct.paulista.pe.gov.br ${additionalImageSources}`,
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' ws: wss:",
     "frame-src https://www.google.com https://maps.google.com",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",

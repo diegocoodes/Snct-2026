@@ -4,8 +4,10 @@ import {
   AVALIACAO_TOTAL_MAXIMO,
   ESCALA_DESEMPENHO,
   getAvaliacaoDoAvaliadorPorStand,
+  getMinAvaliacoesPorAvaliador,
   getReservaAtivaDoStand,
   getStandParaAvaliacao,
+  getStandParaTitulacao,
   JA_AVALIADO_MSG,
   listAvaliacoesDoAvaliador,
   salvarAvaliacao,
@@ -21,6 +23,43 @@ import {
   getTitulacoesDoDia,
   listTitulacaoCategorias,
 } from "@/lib/titulacoes";
+import { getRankingAoVivo } from "@/lib/ranking";
+import { broadcastRankingUpdate } from "@/lib/ranking-broadcast";
+
+export async function GET_STAND_TITULACAO(request: Request, standId: string) {
+  try {
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+
+    await enforceRateLimit({
+      request,
+      scope: "avaliador-stand-titulacao",
+      identifier: session.userId,
+      limit: 60,
+      windowSeconds: 60,
+    });
+
+    const result = await getStandParaTitulacao(session.userId, standId);
+    if (!result) {
+      return Response.json({ error: "Stand não encontrado." }, { status: 404 });
+    }
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
+
+    const titulacoes = await getTitulacoesDoDia(session.userId);
+    return Response.json({
+      stand: result.stand,
+      projeto: result.projeto,
+      titulacoes,
+      modo: "titulacao",
+    });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
 
 export async function GET_CRITERIOS(request: Request) {
   try {
@@ -45,7 +84,17 @@ export async function GET_MINHAS_AVALIACOES(request: Request) {
       return Response.json({ error: "Não autorizado." }, { status: 401 });
     }
     const avaliacoes = await listAvaliacoesDoAvaliador(session.userId);
-    return Response.json({ avaliacoes });
+    const minimo = getMinAvaliacoesPorAvaliador();
+    const feitas = avaliacoes.length;
+    return Response.json({
+      avaliacoes,
+      meta: {
+        feitas,
+        minimo,
+        restante: Math.max(0, minimo - feitas),
+        metaAtingida: feitas >= minimo,
+      },
+    });
   } catch (error) {
     return securityErrorResponse(error);
   }
@@ -62,6 +111,19 @@ export async function GET_TITULACOES(request: Request) {
       ...titulacoes,
       categorias: listTitulacaoCategorias(),
     });
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
+}
+
+export async function GET_RANKING(request: Request) {
+  try {
+    const session = await requireRole("avaliador", "admin");
+    if (!session) {
+      return Response.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    const ranking = await getRankingAoVivo();
+    return Response.json(ranking);
   } catch (error) {
     return securityErrorResponse(error);
   }
@@ -112,6 +174,7 @@ export async function POST_TITULACAO(request: Request) {
     }
 
     const titulacoes = await getTitulacoesDoDia(session.userId);
+    void broadcastRankingUpdate();
     return Response.json({
       ok: true,
       titulacao: result.titulacao,
@@ -292,6 +355,23 @@ export async function POST_AVALIACAO(request: Request) {
         : null;
     const observacoes =
       typeof body?.observacoes === "string" ? body.observacoes : "";
+    const titulacoesRaw = Array.isArray(body?.titulacoes)
+      ? body.titulacoes
+      : [];
+    const titulacoesPedido = titulacoesRaw
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const row = item as Record<string, unknown>;
+        const categoria =
+          typeof row.categoria === "string" ? row.categoria.trim() : "";
+        const alunoId =
+          typeof row.alunoId === "string" ? row.alunoId.trim() : "";
+        if (!categoria || !alunoId) return null;
+        return { categoria, alunoId };
+      })
+      .filter((item): item is { categoria: string; alunoId: string } =>
+        Boolean(item),
+      );
 
     if (!standId || !projetoId || !notas) {
       return Response.json(
@@ -312,7 +392,43 @@ export async function POST_AVALIACAO(request: Request) {
       return Response.json({ error: result.error }, { status: result.status });
     }
 
-    return Response.json({ ok: true, avaliacao: result.avaliacao });
+    const titulacoesConcedidas: {
+      categoria: string;
+      titulo: string;
+      alunoNome: string;
+    }[] = [];
+    const titulacaoErros: string[] = [];
+
+    for (const pedido of titulacoesPedido) {
+      const grant = await concederTitulacao({
+        avaliadorUsuarioId: session.userId,
+        alunoId: pedido.alunoId,
+        standId,
+        projetoId,
+        categoria: pedido.categoria,
+      });
+      if (grant.ok) {
+        titulacoesConcedidas.push({
+          categoria: grant.titulacao.categoria,
+          titulo: grant.titulacao.titulo,
+          alunoNome: grant.titulacao.alunoNome,
+        });
+      } else {
+        titulacaoErros.push(grant.error);
+      }
+    }
+
+    const titulacoes = await getTitulacoesDoDia(session.userId);
+
+    void broadcastRankingUpdate();
+
+    return Response.json({
+      ok: true,
+      avaliacao: result.avaliacao,
+      titulacoesConcedidas,
+      titulacaoErros,
+      titulacoes,
+    });
   } catch (error) {
     return securityErrorResponse(error);
   }

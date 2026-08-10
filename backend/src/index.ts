@@ -27,6 +27,10 @@ import * as registro from "@/routes/registro";
 import * as staff from "@/routes/staff";
 import * as uploads from "@/routes/uploads";
 import * as gameForms from "@/routes/game-forms";
+import {
+  attachRankingSse,
+  attachRankingWebSocket,
+} from "@/lib/ranking-broadcast";
 
 const PORT = Number(process.env.PORT ?? 4101);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -97,6 +101,7 @@ mount("post", "/api/auth/registro/avaliador", registro.POST_AVALIADOR);
 mount("post", "/api/auth/registro/professor", registro.POST_PROFESSOR);
 mount("post", "/api/auth/registro/visitante", registro.POST_VISITANTE);
 mount("post", "/api/auth/registro/arena", arena.POST_ARENA_TIME);
+mount("get", "/api/arena/vagas", arena.GET_VAGAS);
 mount("post", "/api/credencial/visitante", credencial.POST_VISITANTE_CPF);
 mount("get", "/api/auth/{*path}", authAll.GET);
 mount("post", "/api/auth/{*path}", authAll.POST);
@@ -112,6 +117,10 @@ mount("post", "/api/professor", professor.POST);
 mount("delete", "/api/professor", professor.DELETE);
 mount("get", "/api/avaliador/criterios", avaliador.GET_CRITERIOS);
 mount("get", "/api/avaliador/avaliacoes", avaliador.GET_MINHAS_AVALIACOES);
+mount("get", "/api/avaliador/ranking", avaliador.GET_RANKING);
+mount("get", "/api/avaliador/stands/:standId/titulacao", (request, standId) =>
+  avaliador.GET_STAND_TITULACAO(request, standId),
+);
 mount("get", "/api/avaliador/titulacoes", avaliador.GET_TITULACOES);
 mount("post", "/api/avaliador/titulacoes", avaliador.POST_TITULACAO);
 mount("post", "/api/avaliador/comecar-avaliacao", avaliador.POST_COMECAR_AVALIACAO);
@@ -145,7 +154,12 @@ mount("get", "/api/documents/:id", documents.GET);
 
 assertDatabaseConfigured();
 
+attachRankingSse(app);
+
 const server = http.createServer(app);
+attachRankingWebSocket(server);
 server.listen(PORT, HOST, () => {
   console.log(`SNCT backend (Express) em http://${HOST}:${PORT}`);
+  console.log(`SNCT ranking WebSocket em ws://${HOST}:${PORT}/ws/ranking`);
+  console.log(`SNCT ranking SSE em http://${HOST}:${PORT}/api/avaliador/ranking/stream`);
 });

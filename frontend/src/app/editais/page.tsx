@@ -92,11 +92,31 @@ export default async function NoticesPage() {
                         </div>
 
                         <div className="mt-5 flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                          {notice.documents.slice(0, 2).map((document, index) => (
+                            <Button
+                              key={document.id}
+                              variant="glow"
+                              render={
+                                <a
+                                  href={`/api/documents/${document.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                />
+                              }
+                            >
+                              <FileText aria-hidden />
+                              {notice.documents.length === 1
+                                ? "Visualizar edital"
+                                : `Visualizar edital ${index + 1}`}
+                            </Button>
+                          ))}
                           <Button
-                            variant="glow"
+                            variant={
+                              notice.documents.length ? "outline" : "glow"
+                            }
                             render={<Link href={`/editais/${notice.id}`} />}
                           >
-                            <FileText aria-hidden /> Ver edital
+                            Detalhes
                             <ArrowRight aria-hidden />
                           </Button>
                         </div>

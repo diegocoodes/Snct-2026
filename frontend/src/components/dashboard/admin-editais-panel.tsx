@@ -229,7 +229,7 @@ function AdminEditaisPanel({ notices }: { notices: ManagedNotice[] }) {
             <DialogDescription>
               {editing
                 ? "Atualize os dados do edital. O status de inscrição segue as datas automaticamente."
-                : "Preencha título, descrição, período, PDF e o link do formulário externo."}
+                : "Preencha título, descrição, período, até 2 PDFs e o link do formulário externo."}
             </DialogDescription>
           </DialogHeader>
 
@@ -310,78 +310,127 @@ function AdminEditaisPanel({ notices }: { notices: ManagedNotice[] }) {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notice-document">
-                {editing ? "Anexar ou substituir PDF" : "Arquivo do edital (PDF)"}
-              </Label>
-              <Input
-                id="notice-document"
-                name="document"
-                type="file"
-                accept=".pdf,application/pdf"
-                className="pt-1.5"
-              />
-            </div>
+            {(() => {
+              const existingCount = editing?.documents.length ?? 0;
+              const freeSlots = Math.max(0, 2 - existingCount);
+              return (
+                <div className="space-y-3">
+                  <div>
+                    <Label>Arquivos do edital (PDF)</Label>
+                    <p className="mt-1 text-xs leading-5 text-blue-gray">
+                      Anexe até 2 editais. Na área pública aparecerá um botão
+                      por arquivo anexado.
+                      {existingCount
+                        ? ` ${existingCount}/2 anexado(s).`
+                        : ""}
+                    </p>
+                  </div>
 
-            {editing?.documents.length ? (
-              <ul className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.025] p-3">
-                {editing.documents.map((document) => (
-                  <li
-                    key={document.id}
-                    className="flex min-w-0 items-center gap-3"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-cyan-electric/10 text-cyan-electric">
-                      <FileText className="size-4" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <a
-                        href={`/api/documents/${document.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block truncate text-sm font-semibold text-ice-white underline-offset-4 hover:text-cyan-electric hover:underline"
-                      >
-                        {document.name}
-                      </a>
-                      <p className="text-xs text-blue-gray">
-                        {(document.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                  {editing?.documents.length ? (
+                    <ul className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                      {editing.documents.map((document, index) => (
+                        <li
+                          key={document.id}
+                          className="flex min-w-0 items-center gap-3"
+                        >
+                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-cyan-electric/10 text-cyan-electric">
+                            <FileText className="size-4" aria-hidden />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-blue-gray">
+                              Edital {index + 1}
+                            </p>
+                            <a
+                              href={`/api/documents/${document.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block truncate text-sm font-semibold text-ice-white underline-offset-4 hover:text-cyan-electric hover:underline"
+                            >
+                              {document.name}
+                            </a>
+                            <p className="text-xs text-blue-gray">
+                              {(document.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="destructive"
+                            aria-label={`Remover documento ${document.name}`}
+                            onClick={() => {
+                              if (
+                                window.confirm(`Remover “${document.name}”?`)
+                              ) {
+                                void mutate(
+                                  {
+                                    action: "deleteNoticeDocument",
+                                    noticeId: editing.id,
+                                    documentId: document.id,
+                                  },
+                                  "Documento removido.",
+                                ).then((ok) => {
+                                  if (!ok) return;
+                                  setEditing((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          documents: current.documents.filter(
+                                            (item) => item.id !== document.id,
+                                          ),
+                                        }
+                                      : current,
+                                  );
+                                });
+                              }
+                            }}
+                          >
+                            <Trash2 aria-hidden />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {freeSlots > 0 ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="notice-document">
+                          {existingCount === 0
+                            ? "1º edital (PDF)"
+                            : "Anexar 2º edital (PDF)"}
+                        </Label>
+                        <Input
+                          id="notice-document"
+                          name="document"
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          className="pt-1.5"
+                        />
+                      </div>
+                      {freeSlots > 1 ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="notice-document-2">
+                            2º edital (PDF, opcional)
+                          </Label>
+                          <Input
+                            id="notice-document-2"
+                            name="document2"
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            className="pt-1.5"
+                          />
+                        </div>
+                      ) : null}
                     </div>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="destructive"
-                      aria-label={`Remover documento ${document.name}`}
-                      onClick={() => {
-                        if (window.confirm(`Remover “${document.name}”?`)) {
-                          void mutate(
-                            {
-                              action: "deleteNoticeDocument",
-                              noticeId: editing.id,
-                              documentId: document.id,
-                            },
-                            "Documento removido.",
-                          ).then((ok) => {
-                            if (!ok) return;
-                            setEditing((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    documents: current.documents.filter(
-                                      (item) => item.id !== document.id,
-                                    ),
-                                  }
-                                : current,
-                            );
-                          });
-                        }
-                      }}
-                    >
-                      <Trash2 aria-hidden />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+                  ) : (
+                    <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-200">
+                      Limite de 2 anexos atingido. Remova um arquivo para
+                      anexar outro.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">
               <Button type="button" variant="outline" onClick={closeDialog}>

@@ -28,6 +28,8 @@ function ConfirmacaoInscricaoClient() {
   const perfil = params.get("perfil") ?? "VISITANTE";
   const time = params.get("time") ?? "";
   const jogo = params.get("jogo") ?? "";
+  const modalidade = params.get("modalidade") ?? "";
+  const isSoloArena = modalidade === "individual";
   const [qrCode, setQrCode] = useState("");
 
   const roleLabel = useMemo(() => {
@@ -72,7 +74,9 @@ function ConfirmacaoInscricaoClient() {
       : isAvaliador
         ? `Seu perfil de ${roleLabel} foi criado. Em Avaliar stands você escaneia o QR do stand e preenche a ficha.`
         : isParticipante
-          ? `Time ${time || nome}${jogo ? ` · ${jogo}` : ""} inscrito na Arena Gamer. Este é o QR Code do responsável — cada integrante criado também tem a própria credencial.`
+          ? isSoloArena
+            ? `Inscrição individual${jogo ? ` · ${jogo}` : ""} confirmada na Arena Gamer. Guarde este QR Code — é a sua credencial.`
+            : `Time ${time || nome}${jogo ? ` · ${jogo}` : ""} inscrito na Arena Gamer. Este é o QR Code do responsável — cada integrante criado também tem a própria credencial.`
           : `Seu perfil de ${roleLabel} foi criado. Apresente este QR Code no check-in diário.`;
 
   return (
@@ -80,7 +84,9 @@ function ConfirmacaoInscricaoClient() {
       eyebrow="Inscrição concluída"
       title={
         isParticipante
-          ? `Time inscrito`
+          ? isSoloArena
+            ? "Inscrição confirmada"
+            : "Time inscrito"
           : `Bem-vindo(a), ${nome.split(" ")[0]}`
       }
       description={description}

@@ -86,7 +86,7 @@ function AdminUsuariosPanel({ users }: { users: PublicUser[] }) {
   const [editing, setEditing] = useState<PublicUser | null>(null);
   const [creating, setCreating] = useState(false);
   const filterFn = useCallback(filterUser, []);
-  const list = useFilteredPagination({ items: users, filterFn });
+  const list = useFilteredPagination({ items: users, filterFn, pageSize: 20 });
 
   function openCreate() {
     setEditing(null);

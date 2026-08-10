@@ -24,6 +24,7 @@ import {
   rejeitarProjeto,
   type ProjetoStatus,
 } from "@/lib/projetos-admin";
+import { listAvaliadoresComAvaliacoesAdmin } from "@/lib/avaliacoes";
 import {
   assertTrustedMutation,
   enforceRateLimit,
@@ -128,6 +129,10 @@ export async function GET(request: Request) {
       })),
     });
   }
+  if (url.searchParams.get("resource") === "avaliacoes") {
+    const avaliadores = await listAvaliadoresComAvaliacoesAdmin();
+    return Response.json({ avaliadores });
+  }
   const usuarioId = url.searchParams.get("usuarioId");
   if (usuarioId) {
     const [store, roleHistory, roles] = await Promise.all([
@@ -168,8 +173,19 @@ export async function GET(request: Request) {
   return Response.json({ ...store, users, auditLogs, roles, estandes, projetos });
 }
 
+const MAX_NOTICE_DOCUMENTS = 2;
+
+function collectNoticeUploadFiles(formData: FormData) {
+  const files: File[] = [];
+  for (const key of ["document", "document2"]) {
+    const value = formData.get(key);
+    if (value instanceof File && value.size > 0) files.push(value);
+  }
+  return files;
+}
+
 export async function POST(request: Request) {
-  let uploadedDocument: ManagedNoticeDocument | undefined;
+  const uploadedDocuments: ManagedNoticeDocument[] = [];
   let uploadedPartnerLogo: string | undefined;
   try {
     const session = await authorizeMutation(request);
@@ -222,7 +238,7 @@ export async function POST(request: Request) {
     const registrationEndsAt = clean(formData.get("registrationEndsAt"), 10);
     const formUrlRaw = clean(formData.get("formUrl"), 2000);
     const id = clean(formData.get("id"), 100) || `notice-${randomUUID()}`;
-    const document = formData.get("document");
+    const uploadFiles = collectNoticeUploadFiles(formData);
 
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
     if (!title || !description) {
@@ -261,8 +277,20 @@ export async function POST(request: Request) {
       );
     }
 
-    if (document instanceof File && document.size > 0) {
-      uploadedDocument = await saveNoticeDocument(document);
+    const currentStore = await readSnctStore();
+    const existingCount =
+      currentStore.notices.find((item) => item.id === id)?.documents.length ?? 0;
+    if (existingCount + uploadFiles.length > MAX_NOTICE_DOCUMENTS) {
+      return Response.json(
+        {
+          error: `Cada edital pode ter no máximo ${MAX_NOTICE_DOCUMENTS} arquivos anexados.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    for (const file of uploadFiles) {
+      uploadedDocuments.push(await saveNoticeDocument(file));
     }
 
     const registration = formatRegistrationPeriod(
@@ -278,7 +306,12 @@ export async function POST(request: Request) {
     const notice = await updateSnctStore<ManagedNotice>((store) => {
       const index = store.notices.findIndex((item) => item.id === id);
       const documents = index >= 0 ? [...store.notices[index].documents] : [];
-      if (uploadedDocument) documents.push(uploadedDocument);
+      documents.push(...uploadedDocuments);
+      if (documents.length > MAX_NOTICE_DOCUMENTS) {
+        throw new Error(
+          `Cada edital pode ter no máximo ${MAX_NOTICE_DOCUMENTS} arquivos anexados.`,
+        );
+      }
       const nextNotice: ManagedNotice = {
         id,
         title,
@@ -301,15 +334,15 @@ export async function POST(request: Request) {
       action: "notice.save",
       entity: "notice",
       entityId: notice.id,
-      metadata: { documentAttached: Boolean(uploadedDocument) },
+      metadata: { documentsAttached: uploadedDocuments.length },
     });
     return Response.json({ notice });
   } catch (error) {
-    if (uploadedDocument) {
-      await deleteNoticeDocumentFile(uploadedDocument.storageName).catch(
-        () => {},
-      );
-    }
+    await Promise.all(
+      uploadedDocuments.map((document) =>
+        deleteNoticeDocumentFile(document.storageName).catch(() => {}),
+      ),
+    );
     if (uploadedPartnerLogo) {
       await deletePartnerLogoFile(uploadedPartnerLogo).catch(() => {});
     }

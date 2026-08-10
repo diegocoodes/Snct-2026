@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { recordAuditEvent } from "@/lib/audit";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
-import { clientExecute, query, transaction } from "@/lib/db";
+import { clientExecute, clientQuery, query, transaction } from "@/lib/db";
 import {
   normalizeCidade,
   normalizeEstado,
@@ -25,6 +25,27 @@ export const ARENA_JOGO_LABELS: Record<ArenaJogo, string> = {
 };
 
 export const ARENA_TEAM_SIZE = 5;
+export const ARENA_SOLO_SIZE = 1;
+/** Máximo de times completos por campeonato (LoL e Valorant). */
+export const ARENA_MAX_TIMES_EQUIPE = (() => {
+  const value = Number(process.env.SNCT_ARENA_MAX_TIMES ?? 10);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 10;
+})();
+
+export const ARENA_TEAM_SIZE_BY_JOGO: Record<ArenaJogo, number> = {
+  LOL: ARENA_TEAM_SIZE,
+  VALORANT: ARENA_TEAM_SIZE,
+  FREE_FIRE: ARENA_SOLO_SIZE,
+};
+
+export function isArenaSolo(jogo: ArenaJogo) {
+  return ARENA_TEAM_SIZE_BY_JOGO[jogo] === ARENA_SOLO_SIZE;
+}
+
+/** LoL e Valorant têm teto de times; Free Fire (individual) não. */
+export function getMaxInscricoesPorJogo(jogo: ArenaJogo) {
+  return isArenaSolo(jogo) ? null : ARENA_MAX_TIMES_EQUIPE;
+}
 
 export type ArenaMembroInput = {
   nomeCompleto: string;
@@ -101,20 +122,42 @@ async function usuarioJaNoJogo(usuarioId: string, jogo: ArenaJogo) {
   return Boolean(result.rows[0]);
 }
 
+export async function countInscricoesPorJogo(jogo: ArenaJogo) {
+  const result = await query<{ total: number | string }>(
+    `SELECT COUNT(*) AS total FROM arena_times WHERE jogo = $1`,
+    [jogo],
+  );
+  return Number(result.rows[0]?.total ?? 0);
+}
+
+export async function getVagasArena() {
+  const rows = await Promise.all(
+    ARENA_JOGOS.map(async (jogo) => {
+      const inscritos = await countInscricoesPorJogo(jogo);
+      const limite = getMaxInscricoesPorJogo(jogo);
+      const restante =
+        limite === null ? null : Math.max(0, limite - inscritos);
+      return {
+        jogo,
+        jogoLabel: ARENA_JOGO_LABELS[jogo],
+        solo: isArenaSolo(jogo),
+        inscritos,
+        limite,
+        restante,
+        esgotado: limite !== null && inscritos >= limite,
+      };
+    }),
+  );
+  return { jogos: rows, maxTimesEquipe: ARENA_MAX_TIMES_EQUIPE };
+}
+
 export async function registrarTimeArena(
   input: ArenaTimeInput,
   request?: Request,
 ) {
-  const nomeTime = input.nomeTime.trim();
+  let nomeTime = input.nomeTime.trim();
   const jogoRaw = input.jogo.trim().toUpperCase();
 
-  if (nomeTime.length < 2 || nomeTime.length > 120) {
-    return {
-      ok: false as const,
-      status: 400,
-      error: "Informe o nome do time (2 a 120 caracteres).",
-    };
-  }
   if (!isArenaJogo(jogoRaw)) {
     return {
       ok: false as const,
@@ -122,6 +165,11 @@ export async function registrarTimeArena(
       error: "Selecione um campeonato válido: LoL, Valorant ou Free Fire.",
     };
   }
+
+  const teamSize = ARENA_TEAM_SIZE_BY_JOGO[jogoRaw];
+  const solo = isArenaSolo(jogoRaw);
+  const membroLabel = solo ? "Participante" : "Integrante";
+
   if (!input.aceitouDireitoImagem) {
     return {
       ok: false as const,
@@ -136,12 +184,41 @@ export async function registrarTimeArena(
       error: "Aceite o aviso de privacidade para continuar.",
     };
   }
-  if (!Array.isArray(input.membros) || input.membros.length !== ARENA_TEAM_SIZE) {
+  if (!Array.isArray(input.membros) || input.membros.length !== teamSize) {
     return {
       ok: false as const,
       status: 400,
-      error: `A equipe deve ter exatamente ${ARENA_TEAM_SIZE} participantes.`,
+      error: solo
+        ? "A inscrição no Free Fire é individual: informe exatamente 1 participante."
+        : `A equipe deve ter exatamente ${teamSize} participantes.`,
     };
+  }
+
+  if (solo && nomeTime.length < 2) {
+    const nickSolo = String(input.membros[0]?.nick ?? "").trim();
+    nomeTime = nickSolo.length >= 2 ? nickSolo : "";
+  }
+
+  if (nomeTime.length < 2 || nomeTime.length > 120) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: solo
+        ? "Informe o nick no jogo (usado como identificação da inscrição)."
+        : "Informe o nome do time (2 a 120 caracteres).",
+    };
+  }
+
+  const limiteTimes = getMaxInscricoesPorJogo(jogoRaw);
+  if (limiteTimes !== null) {
+    const inscritos = await countInscricoesPorJogo(jogoRaw);
+    if (inscritos >= limiteTimes) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: `As vagas de times para ${ARENA_JOGO_LABELS[jogoRaw]} esgotaram (máximo de ${limiteTimes} times).`,
+      };
+    }
   }
 
   const role = await getRoleByCodigo("PARTICIPANTE");
@@ -185,60 +262,62 @@ export async function registrarTimeArena(
     const estado = normalizeEstado(String(raw?.estado ?? ""));
     const cidade = normalizeCidade(String(raw?.cidade ?? ""));
 
+    const prefix = solo ? membroLabel : `${membroLabel} ${ordem}`;
+
     if (nomeCompleto.length < 2) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe o nome completo.`,
+        error: `${prefix}: informe o nome completo.`,
       };
     }
     if (!isEmail(email)) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe um e-mail válido.`,
+        error: `${prefix}: informe um e-mail válido.`,
       };
     }
     if (telefone.length < 10 || telefone.length > 11) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe um telefone válido.`,
+        error: `${prefix}: informe um telefone válido.`,
       };
     }
     if (!isValidCpf(cpf)) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe um CPF válido.`,
+        error: `${prefix}: informe um CPF válido.`,
       };
     }
     if (!birth) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe uma data de nascimento válida.`,
+        error: `${prefix}: informe uma data de nascimento válida.`,
       };
     }
     if (!estado) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: selecione o estado.`,
+        error: `${prefix}: selecione o estado.`,
       };
     }
     if (cidade.length < 2) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe a cidade.`,
+        error: `${prefix}: informe a cidade.`,
       };
     }
     if (nick.length < 2 || nick.length > 80) {
       return {
         ok: false as const,
         status: 400,
-        error: `Integrante ${ordem}: informe o nick no jogo (2 a 80 caracteres).`,
+        error: `${prefix}: informe o nick no jogo (2 a 80 caracteres).`,
       };
     }
     if (seenCpfs.has(cpf)) {
@@ -266,7 +345,7 @@ export async function registrarTimeArena(
       return {
         ok: false as const,
         status: 409,
-        error: `Integrante ${ordem}: CPF e e-mail pertencem a usuários diferentes.`,
+        error: `${prefix}: CPF e e-mail pertencem a usuários diferentes.`,
       };
     }
 
@@ -274,7 +353,7 @@ export async function registrarTimeArena(
       return {
         ok: false as const,
         status: 409,
-        error: `Integrante ${ordem}: este e-mail já está em uso por outro CPF.`,
+        error: `${prefix}: este e-mail já está em uso por outro CPF.`,
       };
     }
 
@@ -282,7 +361,7 @@ export async function registrarTimeArena(
       return {
         ok: false as const,
         status: 409,
-        error: `Integrante ${ordem}: este CPF já está cadastrado com outro e-mail.`,
+        error: `${prefix}: este CPF já está cadastrado com outro e-mail.`,
       };
     }
 
@@ -291,7 +370,9 @@ export async function registrarTimeArena(
       return {
         ok: false as const,
         status: 409,
-        error: `Integrante ${ordem}: já está inscrito em outro time deste campeonato.`,
+        error: solo
+          ? "Você já está inscrito neste campeonato."
+          : `${prefix}: já está inscrito em outro time deste campeonato.`,
       };
     }
 
@@ -315,8 +396,9 @@ export async function registrarTimeArena(
     return {
       ok: false as const,
       status: 400,
-      error:
-        "Há menor(es) de idade no time. O consentimento do responsável é obrigatório.",
+      error: solo
+        ? "O consentimento do responsável é obrigatório para menores de idade."
+        : "Há menor(es) de idade no time. O consentimento do responsável é obrigatório.",
     };
   }
 
@@ -379,6 +461,20 @@ export async function registrarTimeArena(
         throw new Error("Time sem responsável.");
       }
 
+      if (limiteTimes !== null) {
+        const countInside = await clientQuery<{ total: number | string }>(
+          client,
+          `SELECT COUNT(*) AS total FROM arena_times WHERE jogo = $1`,
+          [jogoRaw],
+        );
+        const atuais = Number(countInside.rows[0]?.total ?? 0);
+        if (atuais >= limiteTimes) {
+          throw new Error(
+            `As vagas de times para ${ARENA_JOGO_LABELS[jogoRaw]} esgotaram (máximo de ${limiteTimes} times).`,
+          );
+        }
+      }
+
       const timeInsert = await clientExecute(
         client,
         `INSERT INTO arena_times (nome, jogo, responsavel_usuario_id)
@@ -423,6 +519,7 @@ export async function registrarTimeArena(
         metadata: {
           jogo: jogoRaw,
           nomeTime,
+          solo,
           createdUsers: result.memberIds.filter((m) => m.created).length,
           linkedUsers: result.memberIds.filter((m) => !m.created).length,
         },
@@ -436,6 +533,7 @@ export async function registrarTimeArena(
         nome: nomeTime,
         jogo: jogoRaw,
         jogoLabel: ARENA_JOGO_LABELS[jogoRaw],
+        solo,
         membros: result.memberIds.map((m) => ({
           ordem: m.ordem,
           usuarioId: m.usuarioId,
@@ -452,6 +550,9 @@ export async function registrarTimeArena(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Não foi possível cadastrar o time.";
+    if (/vagas de times.*esgotaram/i.test(message)) {
+      return { ok: false as const, status: 409, error: message };
+    }
     return { ok: false as const, status: 500, error: message };
   }
 }

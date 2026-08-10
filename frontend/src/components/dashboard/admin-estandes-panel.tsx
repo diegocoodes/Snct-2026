@@ -87,7 +87,20 @@ async function downloadStandQr(hash: string, codigo: string) {
 }
 
 async function printStandQrs(estandes: AdminEstande[]) {
-  const printable = estandes.filter((item) => item.qrCodeHash).slice(0, 4);
+  const printable = estandes
+    .filter((item) => item.qrCodeHash)
+    .slice()
+    .sort((a, b) => {
+      const na = Number(a.codigo);
+      const nb = Number(b.codigo);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+      return a.codigo.localeCompare(b.codigo, "pt-BR", { numeric: true });
+    });
+
+  if (printable.length === 0) {
+    throw new Error("Nenhum stand com QR Code para imprimir.");
+  }
+
   const qrs = await Promise.all(
     printable.map(async (item) => ({
       ...item,
@@ -99,6 +112,12 @@ async function printStandQrs(estandes: AdminEstande[]) {
       }),
     })),
   );
+
+  const pages: (typeof qrs)[] = [];
+  for (let i = 0; i < qrs.length; i += 4) {
+    pages.push(qrs.slice(i, i + 4));
+  }
+
   const printWindow = window.open("", "_blank", "width=900,height=900");
   if (!printWindow) throw new Error("A janela de impressão foi bloqueada.");
   printWindow.document.write(`<!doctype html>
@@ -107,22 +126,41 @@ async function printStandQrs(estandes: AdminEstande[]) {
       @page { size: A4; margin: 12mm; }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: Arial, sans-serif; color: #10002b; }
-      main { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
-      article { min-height: 125mm; display: grid; place-items: center; align-content: center;
-        border: 1px dashed #777; border-radius: 10px; padding: 8mm; break-inside: avoid; }
+      .page {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8mm;
+        min-height: calc(297mm - 24mm);
+        page-break-after: always;
+      }
+      .page:last-child { page-break-after: auto; }
+      article {
+        min-height: 125mm;
+        display: grid;
+        place-items: center;
+        align-content: center;
+        border: 1px dashed #777;
+        border-radius: 10px;
+        padding: 8mm;
+        break-inside: avoid;
+      }
       img { width: 78mm; height: 78mm; }
       h1 { margin: 0 0 4mm; font-size: 22pt; }
       p { margin: 3mm 0 0; font-size: 11pt; text-align: center; }
-    </style></head><body><main>
-      ${qrs
+    </style></head><body>
+      ${pages
         .map(
-          (item) => `<article><h1>Stand ${item.codigo}</h1>
+          (page) => `<section class="page">${page
+            .map(
+              (item) => `<article><h1>Stand ${item.codigo}</h1>
             <img src="${item.src}" alt="QR Code do stand ${item.codigo}">
             <p>${item.projetoTitulo ?? item.nome ?? "SNCT Paulista 2026"}</p>
           </article>`,
+            )
+            .join("")}</section>`,
         )
         .join("")}
-    </main><script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
+    <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
     </body></html>`);
   printWindow.document.close();
 }
@@ -285,7 +323,7 @@ function AdminEstandesPanel() {
     (estande: AdminEstande, query: string) => filterEstande(estande, query),
     [],
   );
-  const list = useFilteredPagination({ items: estandes, filterFn, pageSize: 4 });
+  const list = useFilteredPagination({ items: estandes, filterFn, pageSize: 20 });
 
   if (loading) {
     return (
@@ -314,15 +352,24 @@ function AdminEstandesPanel() {
             <Button
               type="button"
               variant="outline"
-              disabled={!list.pageItems.some((item) => item.qrCodeHash)}
+              disabled={!estandes.some((item) => item.qrCodeHash) || busy}
               onClick={() =>
-                void printStandQrs(list.pageItems).catch((error) =>
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : "Não foi possível imprimir.",
-                  ),
-                )
+                void printStandQrs(estandes)
+                  .then(() => {
+                    const total = estandes.filter((item) => item.qrCodeHash)
+                      .length;
+                    const folhas = Math.ceil(total / 4);
+                    toast.success(
+                      `${total} QR Code(s) em ${folhas} folha(s) (4 por página).`,
+                    );
+                  })
+                  .catch((error) =>
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : "Não foi possível imprimir.",
+                    ),
+                  )
               }
             >
               <Printer aria-hidden /> Imprimir 4 QR Codes

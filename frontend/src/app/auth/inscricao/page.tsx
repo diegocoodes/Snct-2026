@@ -25,7 +25,7 @@ const options = [
     href: "/auth/inscricao/arena",
     title: "Participante — Arena Gamer",
     description:
-      "Inscreva o time completo (5 integrantes) em LoL, Valorant ou Free Fire.",
+      "LoL e Valorant: time de 5 (máx. 10 times). Free Fire: individual.",
   },
 ] as const;
 

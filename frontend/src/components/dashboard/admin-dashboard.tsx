@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
+  ClipboardCheck,
   Eye,
   EyeOff,
   FolderKanban,
@@ -21,11 +22,14 @@ import {
   ScrollText,
   ShieldCheck,
   Trash2,
+  Trophy,
   UserRound,
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminAvaliacoesPanel } from "@/components/dashboard/admin-avaliacoes-panel";
+import { AvaliadorRankingLive } from "@/components/avaliador/avaliador-ranking-live";
 import { AdminEditaisPanel } from "@/components/dashboard/admin-editais-panel";
 import { AdminEstandesPanel } from "@/components/dashboard/admin-estandes-panel";
 import { AdminGameFormsPanel } from "@/components/dashboard/admin-game-forms-panel";
@@ -225,6 +229,12 @@ function AdminDashboard({
           </TabsTrigger>
           <TabsTrigger value="projetos">
             <FolderKanban aria-hidden /> Projetos
+          </TabsTrigger>
+          <TabsTrigger value="avaliacoes">
+            <ClipboardCheck aria-hidden /> Avaliações
+          </TabsTrigger>
+          <TabsTrigger value="ranking">
+            <Trophy aria-hidden /> Ranking
           </TabsTrigger>
           <TabsTrigger value="forms">
             <FilePlus2 aria-hidden /> Formulários
@@ -672,6 +682,14 @@ function AdminDashboard({
 
         <TabsContent value="projetos" className="pt-7">
           <AdminProjetosPanel />
+        </TabsContent>
+
+        <TabsContent value="avaliacoes" className="pt-7">
+          <AdminAvaliacoesPanel />
+        </TabsContent>
+
+        <TabsContent value="ranking" className="pt-7">
+          <AvaliadorRankingLive />
         </TabsContent>
 
         <TabsContent value="forms" className="pt-7">

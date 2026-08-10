@@ -3,7 +3,11 @@ import {
   enforceRateLimit,
   securityErrorResponse,
 } from "@/lib/request-security";
-import { registrarTimeArena, type ArenaMembroInput } from "@/lib/arena";
+import {
+  getVagasArena,
+  registrarTimeArena,
+  type ArenaMembroInput,
+} from "@/lib/arena";
 
 function parseBoolean(value: unknown) {
   return value === true || value === "true" || value === "on";
@@ -24,6 +28,15 @@ function parseMembros(raw: unknown): ArenaMembroInput[] {
       nick: String(row.nick ?? ""),
     };
   });
+}
+
+export async function GET_VAGAS(_request: Request) {
+  try {
+    const vagas = await getVagasArena();
+    return Response.json(vagas);
+  } catch (error) {
+    return securityErrorResponse(error);
+  }
 }
 
 export async function POST_ARENA_TIME(request: Request) {
@@ -73,7 +86,9 @@ export async function POST_ARENA_TIME(request: Request) {
           qrCodeHash: result.responsavel.qrCodeHash,
         },
         qrCodeHash: result.responsavel.qrCodeHash,
-        message: "Time inscrito com sucesso na Arena Gamer.",
+        message: result.time.solo
+          ? "Inscrição individual concluída na Arena Gamer."
+          : "Time inscrito com sucesso na Arena Gamer.",
       },
       { status: 201 },
     );

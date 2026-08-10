@@ -52,10 +52,7 @@ export default async function NoticeDetailPage({
     if (!notice.formUrl?.trim()) return "Formulário não informado";
     return "Inscrições Encerradas";
   })();
-  const primaryDocument =
-    notice.documents.find((document) =>
-      document.mimeType.toLowerCase().includes("pdf"),
-    ) ?? notice.documents[0];
+  const viewDocuments = notice.documents.slice(0, 2);
   const isArenaGamer = /arena\s*gamer/i.test(notice.title);
 
   return (
@@ -153,19 +150,25 @@ export default async function NoticeDetailPage({
                 </div>
 
                 <div className="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:flex-wrap">
-                  {primaryDocument ? (
-                    <Button
-                      variant="glow"
-                      render={
-                        <a
-                          href={`/api/documents/${primaryDocument.id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        />
-                      }
-                    >
-                      <Download aria-hidden /> Baixar Edital
-                    </Button>
+                  {viewDocuments.length ? (
+                    viewDocuments.map((document, index) => (
+                      <Button
+                        key={document.id}
+                        variant="glow"
+                        render={
+                          <a
+                            href={`/api/documents/${document.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          />
+                        }
+                      >
+                        <Download aria-hidden />
+                        {viewDocuments.length === 1
+                          ? "Visualizar Edital"
+                          : `Visualizar Edital ${index + 1}`}
+                      </Button>
+                    ))
                   ) : (
                     <Button variant="outline" disabled>
                       <FileText aria-hidden /> PDF indisponível
@@ -191,42 +194,6 @@ export default async function NoticeDetailPage({
                     </Button>
                   )}
                 </div>
-
-                {notice.documents.length > 1 ? (
-                  <div>
-                    <h3 className="text-sm font-semibold tracking-wide text-ice-white uppercase">
-                      Documentos anexos
-                    </h3>
-                    <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {notice.documents.map((document) => (
-                        <li key={document.id}>
-                          <a
-                            href={`/api/documents/${document.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3 transition-colors hover:border-cyan-electric/30 hover:bg-cyan-electric/[0.05]"
-                          >
-                            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-cyan-electric/10 text-cyan-electric">
-                              <FileText className="size-4" aria-hidden />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-semibold text-ice-white">
-                                {document.name}
-                              </span>
-                              <span className="text-xs text-blue-gray">
-                                {(document.size / 1024 / 1024).toFixed(2)} MB
-                              </span>
-                            </span>
-                            <Download
-                              className="size-4 shrink-0 text-cyan-electric"
-                              aria-hidden
-                            />
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
               </CardContent>
             </Card>
           </div>

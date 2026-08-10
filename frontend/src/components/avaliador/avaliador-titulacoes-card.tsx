@@ -63,8 +63,8 @@ function AvaliadorTitulacoesCard() {
           Titulações do dia
         </CardTitle>
         <p className="text-sm text-blue-gray">
-          Você tem 3 títulos por dia (Pequenas Cientistas, Exploradoras e
-          Pesquisadoras). Cada um só pode ser concedido uma vez ao dia, para um
+          Você tem 3 títulos por dia (Pequeno(a) Cientista, Explorador(a) e
+          Pesquisador(a)). Cada um só pode ser concedido uma vez ao dia, para um
           único candidato. Quando as 3 forem usadas, voltam no próximo dia do
           evento.
         </p>

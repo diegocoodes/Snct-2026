@@ -98,6 +98,7 @@ function AdminProjetosPanel() {
   const list = useFilteredPagination({
     items: projetosFiltrados,
     filterFn,
+    pageSize: 20,
   });
 
   const load = useCallback(async () => {

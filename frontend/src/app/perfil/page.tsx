@@ -5,6 +5,7 @@ import { School } from "lucide-react";
 
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { MfaEnrollment } from "@/components/auth/mfa-enrollment";
+import { AvaliadorRankingLive } from "@/components/avaliador/avaliador-ranking-live";
 import { AvaliadorTitulacoesCard } from "@/components/avaliador/avaliador-titulacoes-card";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { StaffCheckinPanel } from "@/components/check-in/staff-checkin-panel";
@@ -98,8 +99,11 @@ export default async function ProfilePage() {
             Avaliar stands (escanear QR)
           </Button>
         </div>
-        <AvaliadorTitulacoesCard />
-        <VisitorPass visitor={toPublicUser(visitor)} showSecurity={false} />
+        <div className="grid gap-6">
+          <AvaliadorRankingLive />
+          <AvaliadorTitulacoesCard />
+          <VisitorPass visitor={toPublicUser(visitor)} showSecurity={false} />
+        </div>
       </DashboardShell>
     );
   }

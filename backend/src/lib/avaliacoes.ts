@@ -261,6 +261,116 @@ export async function getStandParaAvaliacao(qrCodeHash: string) {
   };
 }
 
+/** Abre stand já avaliado pelo avaliador apenas para conceder titulações. */
+export async function getStandParaTitulacao(
+  avaliadorUsuarioId: string,
+  standId: string,
+) {
+  const id = standId.trim();
+  if (!id || !/^\d+$/.test(id)) return null;
+
+  const avaliacao = await prisma.avaliacao.findUnique({
+    where: {
+      avaliadorUsuarioId_standId: {
+        avaliadorUsuarioId: BigInt(avaliadorUsuarioId),
+        standId: BigInt(id),
+      },
+    },
+  });
+  if (!avaliacao) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Só é possível premiar títulos em stands que você já avaliou.",
+    };
+  }
+
+  const stand = await prisma.stand.findUnique({
+    where: { id: BigInt(id) },
+    include: {
+      projeto: {
+        include: {
+          escola: {
+            include: {
+              professor: {
+                select: { id: true, nomeCompleto: true, email: true },
+              },
+            },
+          },
+          alunos: {
+            select: {
+              id: true,
+              nomeCompleto: true,
+              usuarioId: true,
+              usuario: { select: { dataNascimento: true } },
+            },
+            orderBy: { nomeCompleto: "asc" },
+            take: 4,
+          },
+        },
+      },
+    },
+  });
+
+  if (!stand?.projeto || stand.projeto.status !== "APROVADO") {
+    return {
+      ok: false as const,
+      status: 404,
+      error: "Stand ou projeto não encontrado.",
+    };
+  }
+
+  function ageFromBirth(value: Date) {
+    const iso = value.toISOString().slice(0, 10);
+    const [y, m, d] = iso.split("-").map(Number);
+    const now = new Date();
+    let age = now.getFullYear() - y;
+    if (
+      now.getMonth() + 1 < m ||
+      (now.getMonth() + 1 === m && now.getDate() < d)
+    ) {
+      age -= 1;
+    }
+    return age;
+  }
+
+  const projeto = stand.projeto;
+  return {
+    ok: true as const,
+    stand: {
+      id: toId(stand.id),
+      codigo: stand.codigo,
+      nome: stand.nome,
+      status: stand.status,
+      qrCodeHash: stand.qrCodeHash,
+    },
+    projeto: {
+      id: toId(projeto.id),
+      titulo: projeto.titulo,
+      area: projeto.area,
+      descricao: projeto.descricao,
+      status: projeto.status,
+      instituicao: projeto.escola.nome,
+      professor: {
+        id: toId(projeto.escola.professor.id),
+        nomeCompleto: projeto.escola.professor.nomeCompleto,
+        email: projeto.escola.professor.email,
+      },
+      alunos: projeto.alunos.map((aluno) => {
+        const age = ageFromBirth(aluno.usuario.dataNascimento);
+        return {
+          id: toId(aluno.id),
+          usuarioId: toId(aluno.usuarioId),
+          nomeCompleto: aluno.nomeCompleto,
+          idade: age,
+        };
+      }),
+    },
+    avaliacaoId: toId(avaliacao.id),
+  };
+}
+
 export async function getAvaliacaoDoAvaliadorPorStand(
   avaliadorUsuarioId: string,
   standId: string,
@@ -321,6 +431,80 @@ export async function listAvaliacoesDoAvaliador(avaliadorUsuarioId: string) {
   }));
 }
 
+/** Visão admin: todos os avaliadores e os trabalhos que cada um avaliou. */
+export async function listAvaliadoresComAvaliacoesAdmin() {
+  const avaliadores = await prisma.usuario.findMany({
+    where: { role: { codigo: "AVALIADOR" } },
+    select: {
+      id: true,
+      nomeCompleto: true,
+      email: true,
+      telefone: true,
+      cpf: true,
+      ativo: true,
+      createdAt: true,
+      avaliacoes: {
+        include: {
+          stand: { select: { id: true, codigo: true, nome: true } },
+          projeto: {
+            select: {
+              id: true,
+              titulo: true,
+              area: true,
+              escola: { select: { nome: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+    orderBy: { nomeCompleto: "asc" },
+  });
+
+  return avaliadores.map((avaliador) => {
+    const trabalhos = avaliador.avaliacoes.map((row) => ({
+      id: toId(row.id),
+      standId: toId(row.standId),
+      standCodigo: row.stand.codigo,
+      standNome: row.stand.nome || row.stand.codigo,
+      projetoId: toId(row.projetoId),
+      projetoTitulo: row.projeto.titulo,
+      projetoArea: row.projeto.area,
+      escolaNome: row.projeto.escola?.nome ?? null,
+      total: row.total,
+      totalMaximo: AVALIACAO_TOTAL_MAXIMO,
+      observacoes: row.observacoes,
+      criterios: {
+        cPerguntaObjetivos: row.cPerguntaObjetivos,
+        cProcessoInvestigativo: row.cProcessoInvestigativo,
+        cAutoriaProtagonismo: row.cAutoriaProtagonismo,
+        cEvidenciasAprendizagem: row.cEvidenciasAprendizagem,
+        cCriatividadeInovacao: row.cCriatividadeInovacao,
+        cImpactoResponsabilidade: row.cImpactoResponsabilidade,
+        cComunicacaoCientifica: row.cComunicacaoCientifica,
+        cIntegracaoCienciaDelas: row.cIntegracaoCienciaDelas,
+      },
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    }));
+
+    const metaMinima = getMinAvaliacoesPorAvaliador();
+    return {
+      id: toId(avaliador.id),
+      nomeCompleto: avaliador.nomeCompleto,
+      email: avaliador.email,
+      telefone: avaliador.telefone,
+      cpf: avaliador.cpf,
+      ativo: avaliador.ativo,
+      createdAt: avaliador.createdAt.toISOString(),
+      avaliacoesCount: trabalhos.length,
+      metaMinima,
+      metaAtingida: trabalhos.length >= metaMinima,
+      trabalhos,
+    };
+  });
+}
+
 /** Minutos de exclusividade da reserva do stand. */
 export function getReservaMinutos() {
   const value = Number(process.env.SNCT_AVALIACAO_RESERVA_MINUTOS ?? 25);
@@ -331,6 +515,12 @@ export function getReservaMinutos() {
 export function getMaxAvaliacoesPorStand() {
   const value = Number(process.env.SNCT_MAX_AVALIACOES_POR_STAND ?? 3);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 3;
+}
+
+/** Meta mínima de stands que cada avaliador deve avaliar. */
+export function getMinAvaliacoesPorAvaliador() {
+  const value = Number(process.env.SNCT_MIN_AVALIACOES_POR_AVALIADOR ?? 18);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 18;
 }
 
 async function limparReservasExpiradas(now = new Date()) {
