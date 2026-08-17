@@ -24,7 +24,7 @@
     "file-type": "^22.0.1",
     "mysql2": "^3.23.1",
     "nodemailer": "^9.0.3",
-    "ws": "^8.21.2",
+    "ws": "^8.21.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
