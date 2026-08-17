@@ -1,0 +1,40 @@
+{
+  "name": "snct-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "tsx --env-file=.env src/index.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:legacy": "node --env-file=.env scripts/migrate.mjs",
+    "db:studio": "prisma studio",
+    "db:pull": "prisma db pull",
+    "db:cleanup": "node --env-file=.env scripts/cleanup-retention.mjs",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "^6.19.3",
+    "better-auth": "^1.6.23",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "file-type": "^22.0.1",
+    "mysql2": "^3.23.1",
+    "nodemailer": "^9.0.3",
+    "ws": "^8.21.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
+    "@types/ws": "^8.18.1",
+    "prisma": "^6.19.3",
+    "tsx": "^4.20.5",
+    "typescript": "^5"
+  }
+}
